@@ -97,4 +97,17 @@ export function velikost(b = 0) {
   return `${(b / 1024 ** 3).toFixed(1).replace(".", ",")} GB`;
 }
 
+// Stroški: »12,50«, »12.5 €« ali »1.200,00« → 12.5 / 1200; prazno ali nesmiselno → 0.
+export function znesek(v) {
+  let t = String(v ?? "").replace(/[€\s]/g, "");
+  if (/,/.test(t)) t = t.replace(/\./g, "").replace(",", ".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, "");
+  const n = Number(t);
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0;
+}
+export function evri(n = 0) {
+  const [cel, dec] = (Math.round((Number(n) || 0) * 100) / 100).toFixed(2).split(".");
+  return `${cel.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${dec} €`;
+}
+
 export const veljavenEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || "").trim());

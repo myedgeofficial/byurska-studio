@@ -60,3 +60,15 @@ test("nujnost: 2 dni prej oranžno, 1 dan prej in zamuda rdeče, objavljeno nič
   assert.equal(nujnost({ kdaj: ob(-1) }, zdaj), "rdeca");
   assert.equal(nujnost({ kdaj: ob(1), objavljeno: true }, zdaj), "");
 });
+
+test("znesek in evri", async () => {
+  const { znesek, evri } = await import("../src/data.js");
+  assert.equal(znesek("12,50"), 12.5);
+  assert.equal(znesek("12.5 €"), 12.5);
+  assert.equal(znesek("1.200,00"), 1200);
+  assert.equal(znesek("1.200"), 1200);
+  assert.equal(znesek(""), 0);
+  assert.equal(znesek("abc"), 0);
+  assert.equal(evri(1200.5), "1.200,50 €");
+  assert.equal(evri(3), "3,00 €");
+});

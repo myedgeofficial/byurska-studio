@@ -12,7 +12,7 @@ import {
 import { getStorage, ref, uploadBytesResumable, uploadBytes, getDownloadURL, deleteObject, connectStorageEmulator } from "firebase/storage";
 import {
   ZACETNI_CLANI, ZACETNE_MAPE, PLATFORME, platformeIme, drevo, dan, ura, kdajBesedilo, opomnikiZa, PRIVZETI_OPOMNIKI, opisOpomnikov,
-  vrstaDatoteke, velikost, veljavenEmail, nujnost
+  vrstaDatoteke, velikost, veljavenEmail, nujnost, znesek, evri
 } from "./data.js";
 import { novaSol, kljucIzGesla, zakleni, odkleni, preveritev, pravilen } from "./trezor.js";
 
@@ -101,11 +101,11 @@ function initFb() {
 
 /* ---------- stanje ---------- */
 const S = { mape: [], objave: [], clani: {}, trezor: undefined, kljuc: null, kljucOk: false, nalozeno: false };
-const pot = { zaslon: "domov", mapa: null, zavihek: "urejeno" };
+const pot = { zaslon: "domov", mapa: null, zavihek: "todo" };
 const zgod = [];
 const globalne = [];
 let mapaUnsub = [];
-const M = { datoteke: [], gesla: [], opombe: [], odklenjena: {}, nalaganja: [] };
+const M = { datoteke: [], gesla: [], opombe: [], naloge: [], odklenjena: {}, nalaganja: [] };
 
 const imeClana = (e) => S.clani[e]?.ime || ZACETNI_CLANI[e] || String(e || "").split("@")[0];
 const mapa = (id) => S.mape.find((m) => m.id === id);
@@ -253,7 +253,7 @@ function planirajObvestila() {
 function pojdi(zaslon, opts = {}) {
   zgod.push({ ...pot });
   if (pot.mapa !== opts.mapa || zaslon !== "mapa") odjaviMapo();
-  Object.assign(pot, { zaslon, mapa: null, zavihek: "urejeno" }, opts);
+  Object.assign(pot, { zaslon, mapa: null, zavihek: "todo" }, opts);
   if (zaslon === "mapa") prijaviMapo(pot.mapa);
   window.scrollTo(0, 0);
   osvezi();
@@ -262,7 +262,7 @@ function nazaj() {
   const p = zgod.pop() || { zaslon: "domov" };
   if (p.zaslon !== "mapa" || p.mapa !== pot.mapa) odjaviMapo();
   const bilaMapa = pot.mapa;
-  Object.assign(pot, { zaslon: "domov", mapa: null, zavihek: "urejeno" }, p);
+  Object.assign(pot, { zaslon: "domov", mapa: null, zavihek: "todo" }, p);
   if (pot.zaslon === "mapa" && pot.mapa !== bilaMapa) prijaviMapo(pot.mapa);
   window.scrollTo(0, 0);
   osvezi();
@@ -462,7 +462,7 @@ function urediObjavo(o = {}, privzeto = {}) {
 /* =================== MAPA =================== */
 function prijaviMapo(id) {
   odjaviMapo();
-  M.datoteke = []; M.gesla = []; M.opombe = []; M.nalozeno = false;
+  M.datoteke = []; M.gesla = []; M.opombe = []; M.naloge = []; M.nalozeno = false;
   mapaUnsub.push(onSnapshot(query(collection(db, "mape", id, "datoteke"), orderBy("ob", "desc")), (s) => {
     M.datoteke = s.docs.map((d) => ({ id: d.id, ...d.data() })); M.nalozeno = true;
     if (pot.zaslon === "mapa" && pot.mapa === id) osvezi();
@@ -470,6 +470,10 @@ function prijaviMapo(id) {
   mapaUnsub.push(onSnapshot(query(collection(db, "mape", id, "gesla"), orderBy("naslov")), (s) => {
     M.gesla = s.docs.map((d) => ({ id: d.id, ...d.data() }));
     if (pot.zaslon === "mapa" && pot.mapa === id && pot.zavihek === "gesla") osvezi();
+  }, () => {}));
+  mapaUnsub.push(onSnapshot(query(collection(db, "mape", id, "naloge"), orderBy("ob", "desc")), (s) => {
+    M.naloge = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+    if (pot.zaslon === "mapa" && pot.mapa === id && pot.zavihek === "todo" && !document.activeElement?.matches?.("#tn, #tz")) osvezi();
   }, () => {}));
   mapaUnsub.push(onSnapshot(query(collection(db, "mape", id, "opombe"), orderBy("ob", "desc")), (s) => {
     M.opombe = s.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -483,7 +487,7 @@ function renderMapa() {
   if (!m) { view.innerHTML = `<div class="center"><div class="spin"></div></div>`; return; }
   const otroci = S.mape.filter((x) => x.oce === m.id).sort((a, b) => (a.red ?? 0) - (b.red ?? 0));
   const z = pot.zavihek;
-  const tabs = [["urejeno", "Urejeno"], ["surovo", "Surovo"], ["gesla", "Gesla"], ["opombe", "Opombe"], ["objave", "Objave"]];
+  const tabs = [["todo", "TO DO"], ["urejeno", "Urejeno"], ["surovo", "Surovo"], ["gesla", "Gesla"], ["opombe", "Opombe"], ["objave", "Objave"]];
   view.innerHTML = `
   <div class="top"><button class="iconbtn" id="nazaj" aria-label="Nazaj">${ico.nazaj}</button>
     <div class="grow"><h1>${esc(m.ime)}</h1></div>
@@ -500,6 +504,7 @@ function renderMapa() {
   if (z === "urejeno" || z === "surovo") renderDatoteke(el, m, z);
   else if (z === "gesla") renderGesla(el, m);
   else if (z === "opombe") renderOpombe(el, m);
+  else if (z === "todo") renderNaloge(el, m);
   else {
     const moje = S.objave.filter((o) => o.mapa === m.id);
     el.innerHTML = `<button class="btn" id="nova">Nova objava</button>
@@ -517,8 +522,8 @@ function menuMape(m) {
     $("mu").onclick = () => urediMapo(m);
     $("mp").onclick = () => urediMapo(null, m.id);
     $("mb").onclick = async () => {
-      const [d, g, n] = await Promise.all(["datoteke", "gesla", "opombe"].map((c) => getDocs(query(collection(db, "mape", m.id, c), limit(1)))));
-      if (!d.empty || !g.empty || !n.empty || S.mape.some((x) => x.oce === m.id)) return toast("Mapa ni prazna. Najprej odstrani vsebino, gesla, opombe in podmape.");
+      const [d, g, n, t] = await Promise.all(["datoteke", "gesla", "opombe", "naloge"].map((c) => getDocs(query(collection(db, "mape", m.id, c), limit(1)))));
+      if (!d.empty || !g.empty || !n.empty || !t.empty || S.mape.some((x) => x.oce === m.id)) return toast("Mapa ni prazna. Najprej odstrani naloge, vsebino, gesla, opombe in podmape.");
       if (!confirm(`Izbrišem mapo ${m.ime}?`)) return;
       closeSheet(); nazaj(); deleteDoc(doc(db, "mape", m.id)).catch(napaka);
       // samodejno dodana app se ne vrne, če jo izbrišeš
@@ -695,6 +700,54 @@ function pokaziDatoteko(id) {
         if (d.slPot) await deleteObject(ref(storage, d.slPot)).catch(() => {});
         await deleteDoc(doc(db, "mape", pot.mapa, "datoteke", d.id));
       } catch (e) { napaka(e); }
+    };
+  });
+}
+
+/* ---------- TO DO s stroški ---------- */
+function renderNaloge(el, m) {
+  const odprte = M.naloge.filter((n) => !n.narejeno), narejene = M.naloge.filter((n) => n.narejeno);
+  const vsota = (a) => a.reduce((s, n) => s + (n.strosek || 0), 0);
+  const vrstica = (n) => `<div class="item naloga${n.narejeno ? " done" : ""}">
+    <button class="kljuk" data-k="${esc(n.id)}" aria-label="${n.narejeno ? "Ni narejeno" : "Narejeno"}" aria-pressed="${!!n.narejeno}"></button>
+    <button class="grow" data-n="${esc(n.id)}"><div class="ob">${esc(n.besedilo)}</div><small>${esc(imeClana(n.uredil || n.dodal))} · ${esc(kdajBesedilo(n.ob))}</small></button>
+    ${n.strosek ? `<span class="eur">${evri(n.strosek)}</span>` : ""}</div>`;
+  el.innerHTML = `<div class="opn"><textarea id="tn" maxlength="2000" placeholder="Kaj je treba narediti?"></textarea>
+    <div class="row"><input id="tz" inputmode="decimal" placeholder="Strošek €"><button class="btn" id="tdd">Dodaj</button></div></div>
+    <div class="stroski"><div><small>Stroški skupaj</small><b>${evri(vsota(M.naloge))}</b></div><div><small>Še odprto</small><b>${evri(vsota(odprte))}</b></div></div>
+    <div class="list" style="margin-top:12px">${odprte.length ? odprte.map(vrstica).join("") : `<div class="empty">Ni odprtih nalog.</div>`}</div>
+    ${narejene.length ? `<h2>Narejeno</h2><div class="list">${narejene.map(vrstica).join("")}</div>` : ""}`;
+  $("tdd").onclick = async () => {
+    const besedilo = $("tn").value.trim();
+    if (!besedilo) return toast("Napiši, kaj je treba narediti.");
+    $("tdd").disabled = true;
+    try {
+      await addDoc(collection(db, "mape", m.id, "naloge"), { besedilo, strosek: znesek($("tz").value), narejeno: false, dodal: jaz, ob: Date.now() });
+      $("tn").value = ""; $("tz").value = ""; document.activeElement?.blur(); osvezi();
+    } catch (e) { napaka(e); } finally { if ($("tdd")) $("tdd").disabled = false; }
+  };
+  el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => {
+    const n = M.naloge.find((x) => x.id === b.dataset.k);
+    if (n) updateDoc(doc(db, "mape", m.id, "naloge", n.id), { narejeno: !n.narejeno, uredil: jaz }).catch(napaka);
+  }));
+  el.querySelectorAll("[data-n]").forEach((b) => (b.onclick = () => urediNalogo(m, M.naloge.find((x) => x.id === b.dataset.n))));
+}
+
+function urediNalogo(m, n) {
+  if (!n) return;
+  openSheet(`<h3>Naloga</h3>
+    <textarea id="te" maxlength="2000" style="min-height:110px">${esc(n.besedilo)}</textarea>
+    <label for="tez">Strošek €</label><input id="tez" inputmode="decimal" value="${n.strosek ? esc(String(n.strosek).replace(".", ",")) : ""}" placeholder="0,00">
+    <p class="small muted">${esc(imeClana(n.dodal))} · ${esc(kdajBesedilo(n.ob))}</p>
+    <div class="row"><button class="btn" id="tes">Shrani</button><button class="btn danger" id="teb">Izbriši</button></div>`, () => {
+    $("tes").onclick = () => {
+      const besedilo = $("te").value.trim();
+      if (!besedilo) return toast("Naloga je prazna.");
+      updateDoc(doc(db, "mape", m.id, "naloge", n.id), { besedilo, strosek: znesek($("tez").value), uredil: jaz }).catch(napaka); closeSheet();
+    };
+    $("teb").onclick = () => {
+      if (!confirm("Izbrišem nalogo?")) return;
+      deleteDoc(doc(db, "mape", m.id, "naloge", n.id)).catch(napaka); closeSheet();
     };
   });
 }
@@ -916,7 +969,7 @@ function renderNastavitve() {
   initFb();
   onAuthStateChanged(auth, (u) => {
     globalne.splice(0).forEach((f) => f()); odjaviMapo();
-    jaz = ""; zgod.length = 0; Object.assign(pot, { zaslon: "domov", mapa: null, zavihek: "urejeno" }); closeSheet();
+    jaz = ""; zgod.length = 0; Object.assign(pot, { zaslon: "domov", mapa: null, zavihek: "todo" }); closeSheet();
     if (!u) return renderPrijava();
     if (!u.emailVerified) return renderPotrdi(u);
     zacni(u);

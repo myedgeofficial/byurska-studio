@@ -118,8 +118,9 @@ input[type="date"], input[type="time"] { min-height: 48px; }
 .empty { color: var(--muted); padding: 18px 0; text-align: center; font-size: 15px; }
 
 /* mapa */
-.tabs { display: flex; background: #e9ebf0; border-radius: 12px; padding: 3px; margin: 14px 0 6px; }
-.tabs button { flex: 1; padding: 8px 2px; border-radius: 9px; font-size: 13.5px; color: var(--muted); }
+.tabs { display: flex; background: #e9ebf0; border-radius: 12px; padding: 3px; margin: 14px 0 6px; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button { flex: 1 0 auto; padding: 8px 6px; border-radius: 9px; font-size: 13px; white-space: nowrap; color: var(--muted); }
 .tabs button[aria-pressed="true"] { background: var(--panel); box-shadow: var(--shadow); color: var(--text); font-weight: 600; }
 .sub { display: flex; gap: 8px; overflow-x: auto; margin: 10px -16px 0; padding: 0 16px; scrollbar-width: none; }
 .sub::-webkit-scrollbar { display: none; }
@@ -171,3 +172,20 @@ input[type="date"], input[type="time"] { min-height: 48px; }
 .item.opomba .ob { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.4; }
 .item.opomba small { display: block; margin-top: 6px; }
 .opn .btn { margin-top: 0; }
+
+/* TO DO s stroški */
+.opn .row input { flex: 1.4; margin: 0; }
+.opn .row .btn { flex: 1; }
+.stroski { display: flex; gap: 10px; margin-top: 12px; }
+.stroski > div { flex: 1; background: var(--panel); border-radius: 14px; padding: 10px 14px; box-shadow: var(--shadow); }
+.stroski small { display: block; color: var(--muted); font-size: 13px; }
+.stroski b { font-size: 19px; font-variant-numeric: tabular-nums; }
+.item.naloga { align-items: flex-start; }
+.item.naloga .grow { text-align: left; }
+.item.naloga .ob { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.4; }
+.item.naloga small { margin-top: 4px; }
+.item.naloga.done .ob { text-decoration: line-through; color: var(--muted); }
+.kljuk { flex: none; width: 26px; height: 26px; margin-top: 1px; border-radius: 13px; border: 2px solid #c4cad6; background: var(--panel); position: relative; }
+.kljuk[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+.kljuk[aria-pressed="true"]::after { content: ""; position: absolute; left: 7px; top: 3px; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
+.eur { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 1px; }
