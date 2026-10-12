@@ -316,8 +316,11 @@ function narisiCrte() {
     const x1 = r.right - o.left + 10, y1 = r.top + r.height / 2 - o.top;
     let html = "";
     if (g.classList.contains("wide")) {
-      const k = kids[0].getBoundingClientRect();
-      html = `<line x1="${x1}" y1="${y1}" x2="${k.left - o.left - 10}" y2="${y1}"/>`;
+      // Oklepaj: črta do stolpca, navpična hrbtenica in kratka črtica do vsake mape.
+      const sred = (b) => b.top + b.height / 2 - o.top, x2 = kids[0].getBoundingClientRect().left - o.left - 6, xm = (x1 + x2) / 2;
+      const ys = kids.map((k) => sred(k.getBoundingClientRect()));
+      html = `<line x1="${x1}" y1="${y1}" x2="${xm}" y2="${y1}"/><line x1="${xm}" y1="${Math.min(y1, ...ys)}" x2="${xm}" y2="${Math.max(y1, ...ys)}"/>` +
+        ys.map((y) => `<line x1="${xm}" y1="${y}" x2="${x2}" y2="${y}"/>`).join("");
     } else {
       html = kids.map((k) => {
         const b = k.getBoundingClientRect();
