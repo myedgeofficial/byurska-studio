@@ -110,4 +110,17 @@ export function evri(n = 0) {
   return `${cel.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${dec} €`;
 }
 
+// »Spiritualitybyurska.com« → { ime: "Spirituality", pod: "byurska.com" }; ostala imena ostanejo.
+export function kratkoIme(ime = "") {
+  const m = /^(.+?)(by?urska\.com)$/i.exec(String(ime).trim());
+  if (!m) return { ime: String(ime), pod: "" };
+  return { ime: m[1].charAt(0).toUpperCase() + m[1].slice(1), pod: m[2].toLowerCase() };
+}
+
+// 1 naloga, 2 nalogi, 3 naloge, 5 nalog (slovenska dvojina).
+export function stevilo(n, [ena, dve, tri, pet]) {
+  const d = n % 100;
+  return `${n} ${d === 1 ? ena : d === 2 ? dve : d === 3 || d === 4 ? tri : pet}`;
+}
+
 export const veljavenEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || "").trim());

@@ -72,3 +72,14 @@ test("znesek in evri", async () => {
   assert.equal(evri(1200.5), "1.200,50 €");
   assert.equal(evri(3), "3,00 €");
 });
+
+test("kratkoIme in stevilo", async () => {
+  const { kratkoIme, stevilo } = await import("../src/data.js");
+  assert.deepEqual(kratkoIme("Spiritualitybyurska.com"), { ime: "Spirituality", pod: "byurska.com" });
+  assert.equal(kratkoIme("Poetryburska.com").ime, "Poetry");
+  assert.deepEqual(kratkoIme("Nakupko"), { ime: "Nakupko", pod: "" });
+  assert.deepEqual(kratkoIme("Byurska.com"), { ime: "Byurska.com", pod: "" });
+  const N = ["naloga", "nalogi", "naloge", "nalog"];
+  assert.equal(stevilo(1, N), "1 naloga"); assert.equal(stevilo(2, N), "2 nalogi");
+  assert.equal(stevilo(4, N), "4 naloge"); assert.equal(stevilo(5, N), "5 nalog"); assert.equal(stevilo(101, N), "101 naloga");
+});
