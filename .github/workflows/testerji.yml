@@ -1,0 +1,23 @@
+name: TestFlight testerji
+
+# Doda ekipo med testerje na TestFlightu. Ročni zagon: Actions › TestFlight testerji › Run workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      emails:
+        description: "E-pošte, ločene z vejico"
+        default: "teo.simonic7@gmail.com,urska.repusic@gmail.com"
+
+jobs:
+  testerji:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install pyjwt cryptography requests
+      - run: python3 .github/scripts/testerji.py
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          KEY_P8: ${{ secrets.APPSTORE_KEY_P8 }}
+          BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID || 'com.byurska.studio' }}
+          EMAILS: ${{ inputs.emails }}

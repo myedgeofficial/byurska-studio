@@ -1,0 +1,16 @@
+rules_version = '2';
+// Vsebino (slike, videi) vidijo in nalagajo samo člani ekipe; seznam članov je v Firestore (clani/{e-pošta}).
+service firebase.storage {
+  match /b/{bucket}/o {
+    function clan() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && (request.auth.token.email.lower() in ['teo.simonic7@gmail.com', 'urska.repusic@gmail.com']
+            || firestore.exists(/databases/(default)/documents/clani/$(request.auth.token.email.lower())));
+    }
+    match /mape/{vse=**} {
+      allow read, delete: if clan();
+      allow create, update: if clan() && request.resource.size < 5 * 1024 * 1024 * 1024;
+    }
+  }
+}

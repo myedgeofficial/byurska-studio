@@ -1,0 +1,8 @@
+node_modules/
+app/www/
+app/ios/App/App/public/
+app/ios/App/App/capacitor.config.json
+app/ios/App/App/config.xml
+app/fb-config.json
+*.log
+.DS_Store

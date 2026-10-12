@@ -1,0 +1,9 @@
+{
+  "appId": "com.byurska.studio",
+  "appName": "Byurska",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#101114"
+  }
+}
