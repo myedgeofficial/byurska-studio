@@ -43,21 +43,39 @@ export function dan(ms, zdaj = Date.now()) {
 }
 export const kdajBesedilo = (ms, zdaj) => `${dan(ms, zdaj)} ob ${ura(new Date(ms))}`;
 
-// Opomniki za eno objavo: ob 9:00 toliko dni prej, kot je izbrano (privzeto 2 in 1), in ob sami uri objave.
-export function opomnikiZa(o, imeMape, zdaj = Date.now()) {
+// Vsak si sam nastavi, kdaj ga telefon opomni (Nastavitve › Opomniki). Privzeto 2 in 1 dan prej ob 9:00 ter ob uri objave.
+export const PRIVZETI_OPOMNIKI = { dni: [2, 1], ura: "09:00", uroPrej: false, obUri: true };
+
+// Opomniki za eno objavo glede na nastavitve tega telefona. Dan 0 = na dan objave (ob izbrani uri, če je pred objavo).
+export function opomnikiZa(o, imeMape, zdaj = Date.now(), nast = PRIVZETI_OPOMNIKI) {
   if (!o || o.objavljeno || !o.kdaj) return [];
+  const n0 = { ...PRIVZETI_OPOMNIKI, ...nast };
   const kaj = `${imeMape} na ${platformeIme(o.platforme)}`;
   const d = new Date(o.kdaj);
+  const [h, m] = String(n0.ura || "09:00").split(":").map(Number);
   const out = [];
-  for (const n of [...new Set(o.opomni ?? [2, 1])].sort((a, b) => b - a)) {
-    const t = new Date(d.getFullYear(), d.getMonth(), d.getDate() - n, 9, 0).getTime();
+  for (const n of [...new Set(n0.dni || [])].sort((a, b) => b - a)) {
+    const t = new Date(d.getFullYear(), d.getMonth(), d.getDate() - n, h || 0, m || 0).getTime();
     if (t > zdaj && t < o.kdaj) {
-      out.push({ id: `${o.id}-${n}`, kdaj: t, naslov: n === 1 ? "Jutri objava" : `Čez ${n} dni objava`,
+      out.push({ id: `${o.id}-${n}`, kdaj: t, naslov: n === 0 ? "Danes objava" : n === 1 ? "Jutri objava" : `Čez ${n} dni objava`,
         besedilo: `${kaj}, ${kdajBesedilo(o.kdaj, t)}${o.opis ? ` · ${o.opis}` : ""}` });
     }
   }
-  if (o.kdaj > zdaj) out.push({ id: `${o.id}-0`, kdaj: o.kdaj, naslov: "Čas za objavo", besedilo: `${kaj}${o.opis ? ` · ${o.opis}` : ""}` });
+  const uro = o.kdaj - 3600e3;
+  if (n0.uroPrej && uro > zdaj) out.push({ id: `${o.id}-h`, kdaj: uro, naslov: "Čez 1 uro objava", besedilo: `${kaj}${o.opis ? ` · ${o.opis}` : ""}` });
+  if (n0.obUri && o.kdaj > zdaj) out.push({ id: `${o.id}-0`, kdaj: o.kdaj, naslov: "Čas za objavo", besedilo: `${kaj}${o.opis ? ` · ${o.opis}` : ""}` });
   return out;
+}
+
+// Kratek opis nastavitev, npr. »2 dni in 1 dan prej ob 9:00, ob uri objave«.
+export function opisOpomnikov(nast = PRIVZETI_OPOMNIKI) {
+  const n0 = { ...PRIVZETI_OPOMNIKI, ...nast };
+  const dni = [...new Set(n0.dni || [])].sort((a, b) => b - a).map((n) => n === 0 ? "na dan" : n === 1 ? "1 dan prej" : `${n} dni prej`);
+  const deli = [];
+  if (dni.length) deli.push(`${dni.join(", ")} ob ${n0.ura}`);
+  if (n0.uroPrej) deli.push("1 uro prej");
+  if (n0.obUri) deli.push("ob uri objave");
+  return deli.length ? deli.join(", ") : "brez opomnikov";
 }
 
 // Vrsta datoteke za predogled.

@@ -11,7 +11,7 @@ import {
 } from "firebase/firestore";
 import { getStorage, ref, uploadBytesResumable, uploadBytes, getDownloadURL, deleteObject, connectStorageEmulator } from "firebase/storage";
 import {
-  ZACETNI_CLANI, ZACETNE_MAPE, PLATFORME, platformeIme, drevo, dan, ura, kdajBesedilo, opomnikiZa,
+  ZACETNI_CLANI, ZACETNE_MAPE, PLATFORME, platformeIme, drevo, dan, ura, kdajBesedilo, opomnikiZa, PRIVZETI_OPOMNIKI, opisOpomnikov,
   vrstaDatoteke, velikost, veljavenEmail
 } from "./data.js";
 import { novaSol, kljucIzGesla, zakleni, odkleni, preveritev, pravilen } from "./trezor.js";
@@ -78,7 +78,7 @@ const kljucShramba = {
   }
 };
 
-const prefs = { obvestilaVprasal: false };
+const prefs = { obvestilaVprasal: false, opomniki: { ...PRIVZETI_OPOMNIKI } };
 async function loadPrefs() {
   try { const { value } = await Preferences.get({ key: "studio" }); Object.assign(prefs, JSON.parse(value || "{}")); } catch (e) {}
 }
@@ -244,7 +244,7 @@ function planirajObvestila() {
   if (!native) return;
   clearTimeout(planT);
   planT = setTimeout(() => {
-    const seznam = S.objave.flatMap((o) => opomnikiZa(o, imeMape(o.mapa))).sort((a, b) => a.kdaj - b.kdaj).slice(0, 60);
+    const seznam = S.objave.flatMap((o) => opomnikiZa(o, imeMape(o.mapa), Date.now(), prefs.opomniki)).sort((a, b) => a.kdaj - b.kdaj).slice(0, 60);
     Studio.obvestila({ seznam }).catch(() => {});
   }, 400);
 }
@@ -358,22 +358,21 @@ function pokaziObjavo(id) {
   const o = S.objave.find((x) => x.id === id);
   if (!o) return;
   const d = o.datoteka;
-  const alarmi = opomnikiZa({ ...o, objavljeno: false }, imeMape(o.mapa), 0);
+  const alarmi = opomnikiZa({ ...o, objavljeno: false }, imeMape(o.mapa), 0, prefs.opomniki);
   const naslov = `Objava: ${imeMape(o.mapa)} (${platformeIme(o.platforme)})`;
-  const opomni = [...(o.opomni ?? [2, 1])].sort((a, b) => b - a);
   openSheet(`
     <h3>${esc(imeMape(o.mapa))} · ${esc(platformeIme(o.platforme))}</h3>
     <p>${esc(kdajBesedilo(o.kdaj))}</p>
     ${o.opis ? `<p class="sel muted">${esc(o.opis)}</p>` : ""}
     ${d ? `<div class="preview">${predogled(d)}</div><button class="btn ghost" id="deli">Shrani ali deli vsebino</button>` : ""}
-    <p class="small muted">Opomnik ${opomni.length ? opomni.map((n) => n === 1 ? "1 dan" : `${n} dni`).join(" in ") + " prej ob 9:00 in " : ""}ob uri objave. Dodano: ${esc(imeClana(o.dodal))}.</p>
+    <p class="small muted">Tvoji opomniki: ${esc(opisOpomnikov(prefs.opomniki))}. Dodano: ${esc(imeClana(o.dodal))}.</p>
     <div class="row"><button class="btn ghost" id="kol">V Koledar</button><button class="btn ghost" id="opo">V Opomnike</button></div>
     <button class="btn" id="obj">${o.objavljeno ? "Ni še objavljeno" : "Označi kot objavljeno"}</button>
     <div class="row"><button class="btn ghost" id="ured">Uredi</button><button class="btn danger" id="brisi">Izbriši</button></div>`, () => {
     $("deli")?.addEventListener("click", () => deli(d));
     $("kol").onclick = async () => {
       if (!native) return toast("Deluje v aplikaciji na iPhonu.");
-      const r = await Studio.koledar({ naslov, opis: o.opis || "", zacetek: o.kdaj, alarmi: opomni.map((n) => n * 1440) }).catch(() => null);
+      const r = await Studio.koledar({ naslov, opis: o.opis || "", zacetek: o.kdaj, alarmi: alarmi.map((a) => Math.round((o.kdaj - a.kdaj) / 60000)) }).catch(() => null);
       if (r?.dodano) toast("Dodano v Koledar");
       else if (r?.zavrnjeno) toast("Dovoli dostop do Koledarja v Nastavitvah iPhona.");
     };
@@ -403,7 +402,6 @@ function urediObjavo(o = {}, privzeto = {}) {
   const st = {
     mapa: o.mapa || privzeto.mapa || (pot.zaslon === "mapa" ? pot.mapa : S.mape[0]?.id),
     platforme: [...(o.platforme || ["ig"])],
-    opomni: [...(o.opomni || [2, 1])],
     datoteka: o.datoteka || privzeto.datoteka || null
   };
   openSheet(`
@@ -418,8 +416,7 @@ function urediObjavo(o = {}, privzeto = {}) {
     </div>
     <label for="oo">Kaj objavimo <span class="muted">(ni obvezno)</span></label>
     <textarea id="oo" maxlength="500" placeholder="npr. Reel z novim izgledom, besedilo v opisu">${esc(o.opis || "")}</textarea>
-    <label>Opomni nas</label>
-    <div class="chips" id="oa">${[3, 2, 1].map((n) => `<button type="button" class="chip" data-k="${n}" aria-pressed="${st.opomni.includes(n)}">${n === 1 ? "1 dan prej" : `${n} dni prej`}</button>`).join("")}</div>
+    <p class="small muted">Opomnik: ${esc(opisOpomnikov(prefs.opomniki))}. Vsak si ga nastavi v Nastavitvah.</p>
     <div id="odat"></div>
     <div class="err" id="oerr" hidden></div>
     <button class="btn" id="oshrani">Shrani</button>`, (box) => {
@@ -434,7 +431,6 @@ function urediObjavo(o = {}, privzeto = {}) {
       c.setAttribute("aria-pressed", arr.includes(k));
     }));
     tog("#op", st.platforme, false);
-    tog("#oa", st.opomni, true);
     $("oshrani").onclick = async () => {
       const [y, m, d] = $("od").value.split("-").map(Number);
       const [h, mi] = ($("ou").value || "18:00").split(":").map(Number);
@@ -443,7 +439,7 @@ function urediObjavo(o = {}, privzeto = {}) {
       if (!st.platforme.length) return err("Izberi Instagram ali TikTok.");
       const data = {
         mapa: $("om").value, platforme: st.platforme, kdaj: new Date(y, m - 1, d, h || 0, mi || 0).getTime(),
-        opis: $("oo").value.trim(), opomni: st.opomni.sort((a, b) => b - a), datoteka: st.datoteka || null
+        opis: $("oo").value.trim(), datoteka: st.datoteka || null
       };
       $("oshrani").disabled = true;
       try {
@@ -802,9 +798,18 @@ function renderNastavitve() {
     ${e !== jaz && !ZACETNI_CLANI[e] ? `<button class="link" data-odstrani="${esc(e)}">Odstrani</button>` : ""}</div>`).join("")}</div>
   <button class="btn ghost" id="dodaj">Dodaj člana</button>
   <p class="small muted">Novi član si v aplikaciji ustvari račun s to e-pošto. Za TestFlight ga mora Teo dodati še med testerje.</p>
-  <h2>Obvestila</h2>
-  <button class="btn ghost" id="obv">Vklopi obvestila za objave</button>
-  <p class="small muted">Opomnik pride dan ali dva prej ob 9:00 in ob uri objave. Če ne pride, ga vklopi v Nastavitve › Obvestila › Byurska.</p>
+  <h2>Moji opomniki za objave</h2>
+  <div class="list" style="padding:4px 14px 14px">
+    <label>Koliko prej</label>
+    <div class="chips" id="nd">${[[7, "1 teden"], [3, "3 dni"], [2, "2 dni"], [1, "1 dan"], [0, "Na dan"]].map(([k, n]) => `<button type="button" class="chip" data-k="${k}" aria-pressed="${(prefs.opomniki.dni || []).includes(k)}">${n}</button>`).join("")}</div>
+    <label for="nu">Ob kateri uri</label>
+    <input id="nu" type="time" value="${esc(prefs.opomniki.ura || "09:00")}">
+    <label>Še</label>
+    <div class="chips"><button type="button" class="chip" id="nh" aria-pressed="${!!prefs.opomniki.uroPrej}">1 uro prej</button><button type="button" class="chip" id="no" aria-pressed="${!!prefs.opomniki.obUri}">Ob uri objave</button></div>
+    <p class="small muted" id="nopis">${esc(opisOpomnikov(prefs.opomniki))}</p>
+  </div>
+  <button class="btn ghost" id="obv">Vklopi obvestila</button>
+  <p class="small muted">Nastavitve veljajo samo za tvoj telefon. Če obvestila ne pridejo, jih vklopi v Nastavitve › Obvestila › Byurska.</p>
   <h2>Gesla</h2>
   <button class="btn ghost" id="pozabi">Zakleni gesla na tem telefonu</button>
   <button class="btn danger" id="odjava">Odjava</button>`;
@@ -828,6 +833,16 @@ function renderNastavitve() {
     const e = b.dataset.odstrani;
     if (confirm(`Odstranim ${imeClana(e)} iz ekipe? Izgubi dostop do vsega.`)) deleteDoc(doc(db, "clani", e)).catch(napaka);
   }));
+  const shraniOp = () => { savePrefs(); planirajObvestila(); $("nopis").textContent = opisOpomnikov(prefs.opomniki); };
+  view.querySelectorAll("#nd .chip").forEach((c) => (c.onclick = () => {
+    const k = Number(c.dataset.k), d = prefs.opomniki.dni = [...(prefs.opomniki.dni || [])];
+    const i = d.indexOf(k); i >= 0 ? d.splice(i, 1) : d.push(k);
+    c.setAttribute("aria-pressed", d.includes(k)); shraniOp();
+  }));
+  $("nu").onchange = () => { prefs.opomniki.ura = $("nu").value || "09:00"; shraniOp(); };
+  for (const [id, k] of [["nh", "uroPrej"], ["no", "obUri"]]) $(id).onclick = () => {
+    prefs.opomniki[k] = !prefs.opomniki[k]; $(id).setAttribute("aria-pressed", prefs.opomniki[k]); shraniOp();
+  };
   $("obv").onclick = async () => {
     if (!native) return toast("Deluje v aplikaciji na iPhonu.");
     const r = await Studio.dovoljenje().catch(() => ({}));
