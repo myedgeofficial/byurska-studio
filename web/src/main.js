@@ -7,7 +7,7 @@ import {
 } from "firebase/auth";
 import {
   initializeFirestore, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where,
-  orderBy, limit, onSnapshot, writeBatch, connectFirestoreEmulator
+  orderBy, limit, onSnapshot, writeBatch, arrayUnion, connectFirestoreEmulator
 } from "firebase/firestore";
 import { getStorage, ref, uploadBytesResumable, uploadBytes, getDownloadURL, deleteObject, connectStorageEmulator } from "firebase/storage";
 import {
@@ -290,15 +290,16 @@ function renderDomov() {
       <div class="grp ${g.otroci.length > 3 ? "wide" : "square"}">
         <svg class="lines"></svg>
         <div class="root">${box(g)}</div>
-        ${g.otroci.length ? `<div class="kids">${g.otroci.map(box).join("")}</div>` : ""}
+        <div class="kids">${g.otroci.map(box).join("")}<button class="box plusbox" data-dodaj="${esc(g.id)}">+ Dodaj</button></div>
       </div>`).join("") : `<div class="center"><div class="spin"></div></div>`}
-    <button class="addmap" id="addmap">+ Dodaj mapo</button>
+    <button class="addmap" id="addmap">+ Nova skupina</button>
   </div>
   <h2>Objave</h2>
   <div class="next">${prih.length ? prih.slice(0, 5).map(vrsticaObjave).join("") : `<div class="empty">Ni načrtovanih objav.</div>`}</div>
   <div class="row"><button class="btn" id="nova">Nova objava</button><button class="btn ghost" id="vse">Vse objave</button></div>`;
   $("nast").onclick = () => pojdi("nastavitve");
   $("addmap").onclick = () => urediMapo();
+  view.querySelectorAll("[data-dodaj]").forEach((b) => (b.onclick = () => urediMapo(null, b.dataset.dodaj)));
   $("nova").onclick = () => urediObjavo();
   $("vse").onclick = () => pojdi("objave");
   view.querySelectorAll(".box[data-m]").forEach((b) => (b.onclick = () => pojdi("mapa", { mapa: b.dataset.m })));
@@ -309,7 +310,7 @@ function renderDomov() {
 // Črte kot na skici: pri dolgem seznamu ena črta do stolpca, sicer pahljača do vsake mape.
 function narisiCrte() {
   view.querySelectorAll(".grp").forEach((g) => {
-    const svg = g.querySelector("svg.lines"), root = g.querySelector(".root .box"), kids = [...g.querySelectorAll(".kids .box")];
+    const svg = g.querySelector("svg.lines"), root = g.querySelector(".root .box"), kids = [...g.querySelectorAll(".kids .box:not(.plusbox)")];
     if (!svg || !root || !kids.length) return;
     const o = g.getBoundingClientRect(), r = root.getBoundingClientRect();
     const x1 = r.right - o.left + 10, y1 = r.top + r.height / 2 - o.top;
@@ -511,6 +512,8 @@ function menuMape(m) {
       if (!d.empty || !g.empty || S.mape.some((x) => x.oce === m.id)) return toast("Mapa ni prazna. Najprej odstrani vsebino, gesla in podmape.");
       if (!confirm(`Izbrišem mapo ${m.ime}?`)) return;
       closeSheet(); nazaj(); deleteDoc(doc(db, "mape", m.id)).catch(napaka);
+      // samodejno dodana app se ne vrne, če jo izbrišeš
+      if (m.repo) setDoc(doc(db, "nastavitve", "samodejno"), { izpusti: arrayUnion(m.repo.toLowerCase()) }, { merge: true }).catch(() => {});
     };
   });
 }

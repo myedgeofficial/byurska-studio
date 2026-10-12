@@ -6,6 +6,7 @@ Zasebna iPhone aplikacija za ekipo (Teo, Urška, Nives), samo prek TestFlighta.
 - **Objave** za Instagram in TikTok: telefon opomni 2 dni in 1 dan prej ob 9:00 ter ob uri objave. Vsako objavo lahko dodaš v Koledar ali Opomnike na iPhonu.
 - **Vsaka mapa** ima zavihke *Urejeno* (pripravljeno za objavo), *Surovo* (posnetki za urejanje), *Gesla in info* in *Objave*. Vsebino shraniš v Fotografije ali pošlješ v Instagram/TikTok z gumbom *Shrani ali deli*.
 - **Gesla** so šifrirana na telefonu s skupnim geslom ekipe (AES-GCM). Strežnik vidi samo šifrirano besedilo.
+- **Nove aplikacije**: vsak dan ob 8:17 workflow *Nove aplikacije v Studio* doda vsak nov javni repozitorij na GitHubu kot mapo pod Apps. Kar izbrišeš, se ne vrne. Ročno dodaš app ali stran z gumbom *+ Dodaj* pod skupino.
 - **Skupno**: vsi člani vidijo vse. Dostop imajo samo člani s potrjeno e-pošto (Teo, Urška in kdor je dodan v Nastavitve › Ekipa).
 
 ## Zgradba

@@ -82,6 +82,9 @@ input[type="date"], input[type="time"] { min-height: 48px; }
 .square .root .box { width: 92px; height: 84px; margin-left: 9vw; }
 .square .kids { margin-right: auto; margin-left: 15vw; }
 .square .kids .box { width: 104px; height: 82px; }
+.box.plusbox { background: transparent; border: 1.5px dashed #4a5058; color: var(--muted); box-shadow: none; }
+.square .kids .box.plusbox { height: 44px; }
+.wide .kids .box.plusbox { min-height: 38px; }
 .box .pika { position: absolute; top: 7px; right: 8px; width: 8px; height: 8px; border-radius: 4px; background: var(--warn); }
 .addmap { display: block; margin: 0 auto; color: var(--muted); font-size: 15px; padding: 10px 16px; }
 

@@ -1,0 +1,25 @@
+name: Nove aplikacije v Studio
+
+# Vsak dan pogleda javne repozitorije na GitHubu in nove doda kot mape pod Apps.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  dodaj:
+    runs-on: ubuntu-latest
+    env:
+      P: ${{ vars.FIREBASE_PROJECT || 'byurska-studio' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dodaj nove aplikacije
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -z "$SA" ]; then echo "::warning::Manjka skrivnost FIREBASE_SERVICE_ACCOUNT."; exit 0; fi
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          gcloud auth activate-service-account --key-file="$RUNNER_TEMP/sa.json" --quiet
+          python3 .github/scripts/nove-aplikacije.py
+          rm -f "$RUNNER_TEMP/sa.json"
