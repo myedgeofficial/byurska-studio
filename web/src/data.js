@@ -1,7 +1,7 @@
 // Podatki in pomožne funkcije brez odvisnosti (preizkušene z node --test).
 
 // Kdo ima dostop od začetka. Ostale (npr. Nives) dodaš v aplikaciji pod Nastavitve › Ekipa.
-export const ZACETNI_CLANI = { "teo.simonic7@gmail.com": "Teo", "urska.repusic@gmail.com": "Urška" };
+export const ZACETNI_CLANI = { "teo.simonic7@gmail.com": "Teo", "urska.repusic@gmail.com": "Urška", "nives.ploj@gmail.com": "Nives" };
 
 // Mape kot na skici: Byurska.com s podstranmi in Apps z aplikacijami.
 export const ZACETNE_MAPE = [
