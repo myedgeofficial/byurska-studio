@@ -48,3 +48,15 @@ test("pomožne", () => {
   assert.equal(vrstaDatoteke("", "IMG_1.HEIC"), "slika");
   assert.equal(velikost(25 * 1024 * 1024), "25 MB");
 });
+
+test("nujnost: 2 dni prej oranžno, 1 dan prej in zamuda rdeče, objavljeno nič", async () => {
+  const { nujnost } = await import("../src/data.js");
+  const zdaj = new Date(2026, 9, 12, 10, 0).getTime();
+  const ob = (d, h = 18) => new Date(2026, 9, 12 + d, h, 0).getTime();
+  assert.equal(nujnost({ kdaj: ob(3) }, zdaj), "");
+  assert.equal(nujnost({ kdaj: ob(2, 23) }, zdaj), "oranzna");
+  assert.equal(nujnost({ kdaj: ob(1, 0) }, zdaj), "rdeca");
+  assert.equal(nujnost({ kdaj: ob(0) }, zdaj), "rdeca");
+  assert.equal(nujnost({ kdaj: ob(-1) }, zdaj), "rdeca");
+  assert.equal(nujnost({ kdaj: ob(1), objavljeno: true }, zdaj), "");
+});

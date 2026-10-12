@@ -12,7 +12,7 @@ import {
 import { getStorage, ref, uploadBytesResumable, uploadBytes, getDownloadURL, deleteObject, connectStorageEmulator } from "firebase/storage";
 import {
   ZACETNI_CLANI, ZACETNE_MAPE, PLATFORME, platformeIme, drevo, dan, ura, kdajBesedilo, opomnikiZa, PRIVZETI_OPOMNIKI, opisOpomnikov,
-  vrstaDatoteke, velikost, veljavenEmail
+  vrstaDatoteke, velikost, veljavenEmail, nujnost
 } from "./data.js";
 import { novaSol, kljucIzGesla, zakleni, odkleni, preveritev, pravilen } from "./trezor.js";
 
@@ -273,14 +273,19 @@ function osvezi() {
   ({ domov: renderDomov, mapa: renderMapa, objave: renderObjave, nastavitve: renderNastavitve })[pot.zaslon]();
 }
 
+// Barve utripanja se menjajo s časom (oranžno → rdeče), zato seznam vsakih 5 minut osvežimo.
+setInterval(() => { if (jaz && (pot.zaslon === "domov" || pot.zaslon === "objave") && !document.querySelector("#sheet:not([hidden])")) osvezi(); }, 5 * 60e3);
+
 /* =================== DOMOV (kot na skici) =================== */
 function prihajajoce() {
-  return S.objave.filter((o) => !o.objavljeno && o.kdaj > Date.now() - 6 * 3600e3);
+  return S.objave.filter((o) => !o.objavljeno);
 }
 function renderDomov() {
   const prih = prihajajoce();
-  const blizu = new Set(prih.filter((o) => o.kdaj - Date.now() < 2.5 * 864e5).map((o) => o.mapa));
-  const box = (m) => `<button class="box" data-m="${esc(m.id)}">${esc(m.ime)}${blizu.has(m.id) ? `<span class="pika"></span>` : ""}</button>`;
+  // Mapa utripa po najbolj nujni neobjavljeni objavi (rdeče pred oranžno).
+  const utrip = {};
+  for (const o of prih) { const n = nujnost(o); if (n && utrip[o.mapa] !== "rdeca") utrip[o.mapa] = n; }
+  const box = (m) => `<button class="box${utrip[m.id] ? ` utripa ${utrip[m.id]}` : ""}" data-m="${esc(m.id)}">${esc(m.ime)}</button>`;
   view.className = "";
   view.innerHTML = `
   <div class="top"><div class="grow"><h1>Byurska</h1></div><button class="iconbtn" id="nast" aria-label="Nastavitve">${ico.nast}</button></div>
@@ -334,8 +339,8 @@ window.addEventListener("resize", () => pot.zaslon === "domov" && narisiCrte());
 
 /* =================== OBJAVE =================== */
 function vrsticaObjave(o) {
-  const zamuda = !o.objavljeno && o.kdaj < Date.now();
-  return `<button class="obj${o.objavljeno ? " done" : ""}${zamuda ? " late" : ""}" data-o="${esc(o.id)}">
+  const zamuda = !o.objavljeno && o.kdaj < Date.now(), n = nujnost(o);
+  return `<button class="obj${o.objavljeno ? " done" : ""}${zamuda ? " late" : ""}${n ? ` utripa ${n}` : ""}" data-o="${esc(o.id)}">
     <div class="when"><b>${esc(dan(o.kdaj))}</b>${ura(new Date(o.kdaj))}</div>
     <div class="what"><div>${esc(imeMape(o.mapa))}</div><small>${esc(o.opis || (o.objavljeno ? "Objavljeno" : imeClana(o.dodal)))}</small></div>
     <div class="pl">${(o.platforme || []).map((p) => `<span>${p === "ig" ? "IG" : "TT"}</span>`).join("")}</div>

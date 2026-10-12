@@ -88,7 +88,17 @@ input[type="date"], input[type="time"] { min-height: 48px; }
 .box.plusbox { background: transparent; border: 1.5px dashed #c4cad6; color: var(--muted); box-shadow: none; }
 .square .kids .box.plusbox { height: 44px; }
 .wide .kids .box.plusbox { min-height: 38px; }
-.box .pika { position: absolute; top: 7px; right: 8px; width: 8px; height: 8px; border-radius: 4px; background: var(--warn); }
+/* Objava se bliža: 2 dni prej utripa oranžno, 1 dan prej in kasneje rdeče, dokler ni označena kot objavljena. */
+.utripa.oranzna { --utrip: 247, 144, 9; }
+.utripa.rdeca { --utrip: 240, 68, 56; }
+.box.utripa { animation: utrip 1.4s ease-in-out infinite; }
+.kids .box.utripa { border: 2px solid rgb(var(--utrip)); }
+@keyframes utrip { 0%, 100% { box-shadow: 0 0 0 0 rgba(var(--utrip), .55); } 50% { box-shadow: 0 0 0 7px rgba(var(--utrip), 0); background-color: rgba(var(--utrip), .12); } }
+.obj.utripa { position: relative; padding-left: 12px; }
+.obj.utripa::before { content: ""; position: absolute; left: -4px; top: 12px; bottom: 12px; width: 5px; border-radius: 3px; background: rgb(var(--utrip)); animation: utripc 1.4s ease-in-out infinite; }
+.obj.utripa .when b { color: rgb(var(--utrip)); }
+@keyframes utripc { 50% { opacity: .2; } }
+@media (prefers-reduced-motion: reduce) { .box.utripa, .obj.utripa::before { animation: none; } }
 .addmap { display: block; margin: 0 auto; color: var(--muted); font-size: 15px; padding: 10px 16px; }
 
 /* objave */
@@ -101,7 +111,7 @@ input[type="date"], input[type="time"] { min-height: 48px; }
 .obj .what div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .obj .what small { color: var(--muted); font-size: 14px; }
 .obj.done { opacity: .45; }
-.obj.late .when b { color: var(--warn); }
+.obj.late .when b { color: #f04438; }
 .pl { display: inline-flex; gap: 4px; flex: none; }
 .pl span { font-size: 11px; font-weight: 700; padding: 3px 7px; border-radius: 6px; background: #fdeef4; color: var(--accent); }
 .nextlbl { font-size: 13px; color: var(--muted); padding-top: 10px; }

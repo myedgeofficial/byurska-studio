@@ -41,6 +41,12 @@ export function dan(ms, zdaj = Date.now()) {
   if (razlika === -1) return "včeraj";
   return `${DNEVI[d.getDay()]} ${d.getDate()}. ${d.getMonth() + 1}.`;
 }
+// Kako nujna je objava: 1 dan prej, na dan in z zamudo »rdeca«, 2 dni prej »oranzna«, dokler ni označena kot objavljena.
+export function nujnost(o, zdaj = Date.now()) {
+  if (!o || o.objavljeno || !o.kdaj) return "";
+  const razlika = Math.round((polnoc(new Date(o.kdaj)) - polnoc(new Date(zdaj))) / 864e5);
+  return razlika <= 1 ? "rdeca" : razlika === 2 ? "oranzna" : "";
+}
 export const kdajBesedilo = (ms, zdaj) => `${dan(ms, zdaj)} ob ${ura(new Date(ms))}`;
 
 // Vsak si sam nastavi, kdaj ga telefon opomni (Nastavitve › Opomniki). Privzeto 2 in 1 dan prej ob 9:00 ter ob uri objave.
