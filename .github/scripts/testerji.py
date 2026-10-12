@@ -53,12 +53,13 @@ for email in [e.strip().lower() for e in os.environ["EMAILS"].split(",") if e.st
         else:
             napaka = True
         continue
-    obst = call("GET", "/betaTesters", params={"filter[email]": email}).json()["data"]
-    if obst:
-        r = call("POST", f"/betaGroups/{grupa['id']}/relationships/betaTesters", json={"data": [{"type": "betaTesters", "id": obst[0]["id"]}]})
-    else:
-        r = call("POST", "/betaTesters", json={"data": {"type": "betaTesters", "attributes": {"email": email},
-                 "relationships": {"betaGroups": {"data": [{"type": "betaGroups", "id": grupa["id"]}]}}}})
+    # Tester iz druge aplikacije (npr. Fixko) se v skupino doda z istim klicem kot nov tester.
+    r = call("POST", "/betaTesters", json={"data": {"type": "betaTesters", "attributes": {"email": email},
+             "relationships": {"betaGroups": {"data": [{"type": "betaGroups", "id": grupa["id"]}]}}}})
+    if r.status_code >= 300:
+        obst = call("GET", "/betaTesters", params={"filter[email]": email}).json()["data"]
+        if obst:
+            r = call("POST", f"/betaGroups/{grupa['id']}/relationships/betaTesters", json={"data": [{"type": "betaTesters", "id": obst[0]["id"]}]})
     print(("::notice::Tester " if r.status_code < 300 else "::error::Ni dodan ") + email)
     napaka |= r.status_code >= 300
 
