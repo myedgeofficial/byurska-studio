@@ -36,7 +36,8 @@ while True:
     if not tok:
         break
 if not mape:
-    sys.exit("::notice::Mape še niso ustvarjene (prvi zagon aplikacije). Preskočeno.")
+    print("::notice::Mape še niso ustvarjene (prvi zagon aplikacije). Preskočeno.")
+    sys.exit(0)
 
 s = req(f"{DB}/nastavitve/samodejno") or {}
 izpusti = IZPUSTI | {v.get("stringValue", "") for v in s.get("fields", {}).get("izpusti", {}).get("arrayValue", {}).get("values", [])}
