@@ -39,7 +39,7 @@ jobs:
           FB="npx --yes firebase-tools@14 --project $P --non-interactive"
           export STUDIO_FB_CONFIG=$($FB apps:sdkconfig WEB --json | python3 app/scripts/fb-config.py "$P.firebasestorage.app")
           (cd app && npm ci && node scripts/build-www.js)
-          test -f app/www/index.html
+          test -f app/www/index.html && rm -rf firebase/www && cp -r app/www firebase/www
           cd firebase
           $FB hosting:sites:get "$P" > /dev/null 2>&1 || $FB hosting:sites:create "$P" || true
           $FB deploy --only hosting --force
