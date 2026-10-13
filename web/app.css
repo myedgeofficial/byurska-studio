@@ -203,3 +203,16 @@ input[type="date"], input[type="time"] { min-height: 48px; }
 .kljuk[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
 .kljuk[aria-pressed="true"]::after { content: ""; position: absolute; left: 7px; top: 3px; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
 .eur { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 1px; }
+
+/* računalnik: širši stolpec, okna na sredini */
+@media (hover: hover) and (pointer: fine) {
+  button, .box, .obj, .item { cursor: pointer; }
+  .box:hover, .item:hover, .obj:hover { filter: brightness(.985); }
+}
+@media (min-width: 820px) {
+  main { max-width: 760px; padding-top: 28px; }
+  .sheet-box { top: 50%; bottom: auto; transform: translateY(-50%); max-width: 520px; max-height: 86vh; border-radius: 20px; padding-bottom: 20px; animation: none; }
+  .sheet-box .grab { display: none; }
+  .grid { grid-template-columns: repeat(5, 1fr); }
+  .root { width: 150px; }
+}

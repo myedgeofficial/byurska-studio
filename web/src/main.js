@@ -12,7 +12,7 @@ import {
 import { getStorage, ref, uploadBytesResumable, uploadBytes, getDownloadURL, deleteObject, connectStorageEmulator } from "firebase/storage";
 import {
   ZACETNI_CLANI, ZACETNE_MAPE, PLATFORME, platformeIme, drevo, dan, ura, kdajBesedilo, opomnikiZa, PRIVZETI_OPOMNIKI, opisOpomnikov,
-  vrstaDatoteke, velikost, veljavenEmail, nujnost, znesek, evri, kratkoIme, stevilo
+  vrstaDatoteke, velikost, veljavenEmail, nujnost, znesek, evri, kratkoIme, stevilo, ics
 } from "./data.js";
 import { novaSol, kljucIzGesla, zakleni, odkleni, preveritev, pravilen } from "./trezor.js";
 
@@ -66,7 +66,7 @@ async function kopiraj(t) {
   toast("Kopirano");
 }
 
-// Ključ za gesla: na telefonu v Keychainu, v brskalniku (samo za preizkus) v localStorage.
+// Ključ za gesla: na telefonu v Keychainu, v brskalniku na računalniku v localStorage.
 const kljucShramba = {
   async beri() {
     if (native) return (await Studio.kljucPreberi({ ime: "trezor" }).catch(() => ({}))).vrednost || null;
@@ -404,18 +404,23 @@ function pokaziObjavo(id) {
     ${o.opis ? `<p class="sel muted">${esc(o.opis)}</p>` : ""}
     ${d ? `<div class="preview">${predogled(d)}</div><button class="btn ghost" id="deli">Shrani ali deli vsebino</button>` : ""}
     <p class="small muted">Tvoji opomniki: ${esc(opisOpomnikov(prefs.opomniki))}. Dodano: ${esc(imeClana(o.dodal))}.</p>
-    <div class="row"><button class="btn ghost" id="kol">V Koledar</button><button class="btn ghost" id="opo">V Opomnike</button></div>
+    <div class="row"><button class="btn ghost" id="kol">V Koledar</button>${native ? `<button class="btn ghost" id="opo">V Opomnike</button>` : ""}</div>
     <button class="btn" id="obj">${o.objavljeno ? "Ni še objavljeno" : "Označi kot objavljeno"}</button>
     <div class="row"><button class="btn ghost" id="ured">Uredi</button><button class="btn danger" id="brisi">Izbriši</button></div>`, () => {
     $("deli")?.addEventListener("click", () => deli(d));
     $("kol").onclick = async () => {
-      if (!native) return toast("Deluje v aplikaciji na iPhonu.");
+      if (!native) {
+        // Na računalniku prenesemo .ics, ki ga odpre koledar (Apple Koledar, Outlook, Google).
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([ics({ uid: o.id, naslov, opis: o.opis || "", zacetek: o.kdaj, alarmi: alarmi.map((x) => Math.round((o.kdaj - x.kdaj) / 60000)) })], { type: "text/calendar" }));
+        a.download = `objava-${o.id}.ics`; document.body.append(a); a.click(); a.remove();
+        return toast("Odpri preneseno datoteko, da se doda v koledar.");
+      }
       const r = await Studio.koledar({ naslov, opis: o.opis || "", zacetek: o.kdaj, alarmi: alarmi.map((a) => Math.round((o.kdaj - a.kdaj) / 60000)) }).catch(() => null);
       if (r?.dodano) toast("Dodano v Koledar");
       else if (r?.zavrnjeno) toast("Dovoli dostop do Koledarja v Nastavitvah iPhona.");
     };
-    $("opo").onclick = async () => {
-      if (!native) return toast("Deluje v aplikaciji na iPhonu.");
+    if ($("opo")) $("opo").onclick = async () => {
       const r = await Studio.opomnik({ naslov, opis: o.opis || "", kdaj: o.kdaj, alarmi: alarmi.map((a) => a.kdaj) }).catch(() => null);
       toast(r?.dodano ? "Dodano v Opomnike" : r?.zavrnjeno ? "Dovoli dostop do Opomnikov v Nastavitvah iPhona." : "Ni uspelo");
     };
@@ -932,6 +937,7 @@ function renderNastavitve() {
     ${e !== jaz && !ZACETNI_CLANI[e] ? `<button class="link" data-odstrani="${esc(e)}">Odstrani</button>` : ""}</div>`).join("")}</div>
   <button class="btn ghost" id="dodaj">Dodaj člana</button>
   <p class="small muted">Novi član si v aplikaciji ustvari račun s to e-pošto. Za TestFlight ga mora Teo dodati še med testerje.</p>
+  <div ${native ? "" : "hidden"}>
   <h2>Moji opomniki za objave</h2>
   <div class="list" style="padding:4px 14px 14px">
     <label>Koliko prej</label>
@@ -944,8 +950,10 @@ function renderNastavitve() {
   </div>
   <button class="btn ghost" id="obv">Vklopi obvestila</button>
   <p class="small muted">Nastavitve veljajo samo za tvoj telefon. Če obvestila ne pridejo, jih vklopi v Nastavitve › Obvestila › Byurska.</p>
+  </div>
+  ${native ? "" : `<h2>Opomniki</h2><p class="small muted">Opomnike za objave dobiš na telefonu. Na računalniku objavo dodaš v koledar z gumbom V Koledar.</p>`}
   <h2>Gesla</h2>
-  <button class="btn ghost" id="pozabi">Zakleni gesla na tem telefonu</button>
+  <button class="btn ghost" id="pozabi">Zakleni gesla na ${native ? "tem telefonu" : "tem računalniku"}</button>
   <button class="btn danger" id="odjava">Odjava</button>`;
   $("nazaj").onclick = nazaj;
   $("ime").onclick = () => {

@@ -1,0 +1,46 @@
+name: Spletna različica
+
+# Studio v brskalniku na računalniku: https://byurska-studio.web.app
+# Isti podatki in prijava kot v aplikaciji na iPhonu. Objavi se ob vsaki spremembi zaslonov.
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", "app/scripts/**", "app/package*.json", "firebase/firebase.json", ".github/workflows/splet.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: splet
+  cancel-in-progress: true
+
+jobs:
+  objavi:
+    runs-on: ubuntu-latest
+    env:
+      P: ${{ vars.FIREBASE_PROJECT || 'byurska-studio' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Preizkusi pomožne funkcije
+        working-directory: web
+        run: TZ=Europe/Ljubljana node --test tests/*.test.js
+
+      - name: Zgradi in objavi
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA" ]; then echo "::error::Manjka skrivnost FIREBASE_SERVICE_ACCOUNT."; exit 1; fi
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          FB="npx --yes firebase-tools@14 --project $P --non-interactive"
+          export STUDIO_FB_CONFIG=$($FB apps:sdkconfig WEB --json | python3 app/scripts/fb-config.py "$P.firebasestorage.app")
+          (cd app && npm ci && node scripts/build-www.js)
+          test -f app/www/index.html
+          cd firebase
+          $FB hosting:sites:get "$P" > /dev/null 2>&1 || $FB hosting:sites:create "$P" || true
+          $FB deploy --only hosting --force
+          echo "Objavljeno: https://$P.web.app"

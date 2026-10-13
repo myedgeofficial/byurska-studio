@@ -83,3 +83,13 @@ test("kratkoIme in stevilo", async () => {
   assert.equal(stevilo(1, N), "1 naloga"); assert.equal(stevilo(2, N), "2 nalogi");
   assert.equal(stevilo(4, N), "4 naloge"); assert.equal(stevilo(5, N), "5 nalog"); assert.equal(stevilo(101, N), "101 naloga");
 });
+
+test("ics za koledar na računalniku", async () => {
+  const { ics } = await import("../src/data.js");
+  const t = ics({ uid: "a1", naslov: "Objava: Nakupko, IG", opis: "vrstica 1\nvrstica 2", zacetek: Date.UTC(2026, 9, 14, 16, 30), alarmi: [2880, 0, 0] });
+  assert.match(t, /DTSTART:20261014T163000Z\r\n/);
+  assert.match(t, /SUMMARY:Objava: Nakupko\\, IG\r\n/);
+  assert.match(t, /DESCRIPTION:vrstica 1\\nvrstica 2\r\n/);
+  assert.equal((t.match(/BEGIN:VALARM/g) || []).length, 2);
+  assert.match(t, /TRIGGER:-PT2880M/);
+});

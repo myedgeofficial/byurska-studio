@@ -1,6 +1,7 @@
 # Byurska Studio
 
 Zasebna iPhone aplikacija za ekipo (Teo, Urška, Nives), samo prek TestFlighta.
+Na računalniku: **https://byurska-studio.web.app** (ista prijava in podatki, objavi se samodejno z workflowom *Spletna različica*).
 
 - **Domov** je postavljen kot skica: Byurska.com s podstranmi in Apps (Nakupko, Manifest, Sentinel). Mape lahko dodajaš.
 - **Objave** za Instagram in TikTok: vsak si v Nastavitvah sam izbere, kdaj ga telefon opomni (privzeto 2 in 1 dan prej ob 9:00 ter ob uri objave). Vsako objavo lahko dodaš v Koledar ali Opomnike na iPhonu.

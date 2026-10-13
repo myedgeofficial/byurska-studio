@@ -123,4 +123,16 @@ export function stevilo(n, [ena, dve, tri, pet]) {
   return `${n} ${d === 1 ? ena : d === 2 ? dve : d === 3 || d === 4 ? tri : pet}`;
 }
 
+// Datoteka .ics za koledar na računalniku (Apple Koledar, Outlook, Google). Alarmi v minutah pred začetkom.
+export function ics({ uid, naslov, opis = "", zacetek, alarmi = [] }) {
+  const t = (ms) => new Date(ms).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const besedilo = (x) => String(x).replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/([,;])/g, "\\$1");
+  const v = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Byurska Studio//SL", "BEGIN:VEVENT", `UID:${uid}@byurska-studio`, `DTSTAMP:${t(Date.now())}`,
+    `DTSTART:${t(zacetek)}`, `DTEND:${t(zacetek + 30 * 60e3)}`, `SUMMARY:${besedilo(naslov)}`];
+  if (opis) v.push(`DESCRIPTION:${besedilo(opis)}`);
+  for (const m of [...new Set(alarmi)].filter((m) => m >= 0)) v.push("BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${besedilo(naslov)}`, `TRIGGER:-PT${m}M`, "END:VALARM");
+  v.push("END:VEVENT", "END:VCALENDAR");
+  return v.join("\r\n") + "\r\n";
+}
+
 export const veljavenEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || "").trim());
