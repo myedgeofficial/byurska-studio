@@ -93,3 +93,14 @@ test("ics za koledar na računalniku", async () => {
   assert.equal((t.match(/BEGIN:VALARM/g) || []).length, 2);
   assert.match(t, /TRIGGER:-PT2880M/);
 });
+
+test("barve članov in komu je naloga", async () => {
+  const { barvaClana, nalogaZa } = await import("../src/data.js");
+  assert.equal(barvaClana("teo.simonic7@gmail.com"), "#39ff14");
+  assert.equal(barvaClana("Nives.Ploj@gmail.com"), "#2e7cf6");
+  assert.equal(barvaClana("nekdo@x.si"), "#98a2b3");
+  assert.equal(nalogaZa({ za: "nives.ploj@gmail.com" }, "teo.simonic7@gmail.com"), false);
+  assert.equal(nalogaZa({ za: "nives.ploj@gmail.com" }, "nives.ploj@gmail.com"), true);
+  assert.equal(nalogaZa({ za: "" }, "teo.simonic7@gmail.com"), true);
+  assert.equal(nalogaZa({}, "teo.simonic7@gmail.com"), true);
+});

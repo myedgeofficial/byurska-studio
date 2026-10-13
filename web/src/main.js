@@ -7,12 +7,12 @@ import {
 } from "firebase/auth";
 import {
   initializeFirestore, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where,
-  orderBy, limit, onSnapshot, writeBatch, collectionGroup, arrayUnion, connectFirestoreEmulator
+  orderBy, limit, onSnapshot, writeBatch, collectionGroup, deleteField, arrayUnion, connectFirestoreEmulator
 } from "firebase/firestore";
 import { getStorage, ref, uploadBytesResumable, uploadBytes, getDownloadURL, deleteObject, connectStorageEmulator } from "firebase/storage";
 import {
   ZACETNI_CLANI, ZACETNE_MAPE, PLATFORME, platformeIme, drevo, dan, ura, kdajBesedilo, opomnikiZa, PRIVZETI_OPOMNIKI, opisOpomnikov,
-  vrstaDatoteke, velikost, veljavenEmail, nujnost, znesek, evri, kratkoIme, stevilo, ics
+  vrstaDatoteke, velikost, veljavenEmail, nujnost, znesek, evri, kratkoIme, stevilo, ics, barvaClana, nalogaZa
 } from "./data.js";
 import { novaSol, kljucIzGesla, zakleni, odkleni, preveritev, pravilen } from "./trezor.js";
 
@@ -100,13 +100,17 @@ function initFb() {
 }
 
 /* ---------- stanje ---------- */
-const S = { mape: [], objave: [], naloge: {}, clani: {}, trezor: undefined, kljuc: null, kljucOk: false, nalozeno: false };
+const S = { mape: [], objave: [], naloge: {}, vseNaloge: [], clani: {}, trezor: undefined, kljuc: null, kljucOk: false, nalozeno: false };
 const pot = { zaslon: "domov", mapa: null, zavihek: "todo" };
 const zgod = [];
 const globalne = [];
 let mapaUnsub = [];
 const osnutek = {}; // nedokončan vnos nove naloge
-const M = { datoteke: [], gesla: [], opombe: [], naloge: [], odklenjena: {}, nalaganja: [] };
+// Mape z lastnim geslom, ki so na tej napravi trenutno odklenjene (samo v spominu; po minuti v ozadju se spet zaklenejo).
+const odklenjeneMape = new Set();
+let skritoOd = 0;
+const zaklenjena = (m) => !!m?.zaklep && !odklenjeneMape.has(m.id);
+const M = { datoteke: [], gesla: [], opombe: [], ideje: [], skripte: [], naloge: [], odklenjena: {}, nalaganja: [] };
 
 const imeClana = (e) => S.clani[e]?.ime || ZACETNI_CLANI[e] || String(e || "").split("@")[0];
 const mapa = (id) => S.mape.find((m) => m.id === id);
@@ -221,6 +225,7 @@ async function zacni(u) {
   // Odprte naloge vseh map za pregled na domačem zaslonu.
   globalne.push(onSnapshot(collectionGroup(db, "naloge"), (s) => {
     const po = {};
+    S.vseNaloge = s.docs.map((d) => ({ id: d.id, mapa: d.ref.parent.parent?.id, ...d.data() })).filter((n) => n.mapa && !n.narejeno).sort((a, b) => a.ob - b.ob);
     for (const d of s.docs) {
       const n = d.data(), id = d.ref.parent.parent?.id;
       if (!id || n.narejeno) continue;
@@ -311,12 +316,12 @@ function renderDomov() {
   const ut = (id) => utrip[id] ? ` utripa ${utrip[id]}` : "";
   const otrok = (m) => {
     const k = kratkoIme(m.ime), nal = S.naloge[m.id], o = naslednja[m.id];
-    const meta = [o ? `objava ${dan(o.kdaj)}` : "", nal ? stevilo(nal.st, NALOGE) : ""].filter(Boolean).join(" · ");
+    const meta = zaklenjena(m) ? "zaklenjeno" : [o ? `objava ${dan(o.kdaj)}` : "", nal ? stevilo(nal.st, NALOGE) : ""].filter(Boolean).join(" · ");
     return `<button class="box kid${ut(m.id)}" data-m="${esc(m.id)}">
       <span class="av" style="--h:${odtenek(m.id)}">${esc(k.ime.charAt(0).toUpperCase())}</span>
-      <span class="kt"><b>${esc(k.ime)}</b>${meta ? `<small>${esc(meta)}</small>` : ""}</span></button>`;
+      <span class="kt"><b>${esc(k.ime)}</b>${meta ? `<small>${esc(meta)}</small>` : ""}</span>${m.zaklep ? `<span class="kl">${ico.kljucavnica}</span>` : ""}</button>`;
   };
-  const koren = (g) => `<button class="box${ut(g.id)}" data-m="${esc(g.id)}"><b>${esc(g.ime)}</b>
+  const koren = (g) => `<button class="box${ut(g.id)}" data-m="${esc(g.id)}"><b>${esc(g.ime)}${g.zaklep ? ` <span class="kl">${ico.kljucavnica}</span>` : ""}</b>
     <small>${g.otroci.length ? stevilo(g.otroci.length, g.otroci.every((c) => kratkoIme(c.ime).pod) ? ["stran", "strani", "strani", "strani"] : ["mapa", "mapi", "mape", "map"]) : "prazno"}</small></button>`;
   const teden = prih.filter((o) => o.kdaj < Date.now() + 7 * 864e5).length;
   const vseNal = Object.values(S.naloge).reduce((a, n) => ({ st: a.st + n.st, eur: a.eur + n.eur }), { st: 0, eur: 0 });
@@ -324,12 +329,18 @@ function renderDomov() {
   view.className = "domov";
   view.innerHTML = `
   <div class="top"><div class="grow"><div class="datum">${esc(datum)}</div><h1>Byurska Studio</h1></div><button class="iconbtn" id="nast" aria-label="Nastavitve">${ico.nast}</button></div>
+  <div class="dom">
+  <div class="dom-side">
   <div class="stat">
     <button id="st1"><small>Objave ta teden</small><b>${teden}</b></button>
     <div><small>Odprte naloge</small><b>${vseNal.st}</b></div>
     <div><small>Odprti stroški</small><b>${evri(vseNal.eur).replace(",00 €", " €")}</b></div>
   </div>
   ${prih[0] ? `<div class="next hero"><div class="nextlbl">Naslednja objava</div>${vrsticaObjave(prih[0])}</div>` : ""}
+  <div class="d-moje">${mojeNaloge()}</div>
+  <div class="d-obj"><div class="h2row"><h2>Prihajajoče objave</h2><button id="vse">Vse</button></div>
+  <div class="next">${prih.length ? prih.slice(0, 5).map(vrsticaObjave).join("") : `<div class="empty">Ni načrtovanih objav.</div>`}</div></div>
+  </div>
   <div class="map dots">
     ${S.nalozeno ? drevo(S.mape).map((g) => `
       <section class="grp">
@@ -339,8 +350,7 @@ function renderDomov() {
       </section>`).join("") : `<div class="center"><div class="spin"></div></div>`}
     <button class="addmap" id="addmap">+ Nova skupina</button>
   </div>
-  <div class="h2row"><h2>Prihajajoče objave</h2><button id="vse">Vse</button></div>
-  <div class="next">${prih.length ? prih.slice(0, 5).map(vrsticaObjave).join("") : `<div class="empty">Ni načrtovanih objav.</div>`}</div>
+  </div>
   <button class="fab" id="nova">${ico.plus}<span>Nova objava</span></button>`;
   $("nast").onclick = () => pojdi("nastavitve");
   $("addmap").onclick = () => urediMapo();
@@ -349,7 +359,29 @@ function renderDomov() {
   $("vse").onclick = $("st1").onclick = () => pojdi("objave");
   view.querySelectorAll(".box[data-m]").forEach((b) => (b.onclick = () => pojdi("mapa", { mapa: b.dataset.m })));
   vezObjave(view);
+  vezMojeNaloge();
   requestAnimationFrame(narisiCrte);
+}
+
+// Moje naloge: odprte naloge iz vseh map, ki so zame ali za vse (brez zaklenjenih map).
+function mojeNaloge() {
+  const moje = S.vseNaloge.filter((n) => nalogaZa(n, jaz) && mapa(n.mapa) && !zaklenjena(mapa(n.mapa)));
+  const prikaz = moje.slice(0, 8);
+  return `<div class="h2row"><h2><span class="pika-oseba" style="--c:${barvaClana(jaz)}"></span>Moje naloge</h2>${moje.length ? `<span class="small muted">${moje.length}</span>` : ""}</div>
+  <div class="list moje">${prikaz.length ? prikaz.map((n) => `<div class="item naloga" style="--c:${barvaClana(n.za)}">
+    <button class="kljuk" data-mk="${esc(n.mapa)}/${esc(n.id)}" aria-label="Narejeno" aria-pressed="false"></button>
+    <button class="grow" data-mm="${esc(n.mapa)}"><div class="ob">${esc(n.besedilo)}</div><small>${n.za ? "" : `${oznakaZa(n)} `}${esc(kratkoIme(imeMape(n.mapa)).ime)}</small></button>
+    ${n.strosek ? `<span class="eur">${evri(n.strosek)}</span>` : ""}</div>`).join("")
+    : `<div class="empty">Nimaš odprtih nalog.</div>`}
+    ${moje.length > prikaz.length ? `<div class="empty small">in še ${moje.length - prikaz.length} v mapah</div>` : ""}</div>`;
+}
+function vezMojeNaloge() {
+  view.querySelectorAll("[data-mk]").forEach((b) => (b.onclick = () => {
+    const [mid, nid] = b.dataset.mk.split("/");
+    b.setAttribute("aria-pressed", "true");
+    updateDoc(doc(db, "mape", mid, "naloge", nid), { narejeno: true, uredil: jaz }).then(() => toast("Narejeno")).catch(napaka);
+  }));
+  view.querySelectorAll("[data-mm]").forEach((b) => (b.onclick = () => pojdi("mapa", { mapa: b.dataset.mm, zavihek: "todo" })));
 }
 
 // Črte kot na skici: od skupine do vsake mape, z mehkim zavojem.
@@ -372,11 +404,16 @@ function vrsticaObjave(o) {
   const zamuda = !o.objavljeno && o.kdaj < Date.now(), n = nujnost(o);
   return `<button class="obj${o.objavljeno ? " done" : ""}${zamuda ? " late" : ""}${n ? ` utripa ${n}` : ""}" data-o="${esc(o.id)}">
     <div class="when"><b>${esc(dan(o.kdaj))}</b>${ura(new Date(o.kdaj))}</div>
-    <div class="what"><div>${esc(imeMape(o.mapa))}</div><small>${esc(o.opis || (o.objavljeno ? "Objavljeno" : imeClana(o.dodal)))}</small></div>
+    <div class="what"><div>${esc(imeMape(o.mapa))}</div><small>${esc(zaklenjena(mapa(o.mapa)) ? "Zaklenjena mapa" : o.opis || (o.objavljeno ? "Objavljeno" : imeClana(o.dodal)))}</small></div>
     <div class="pl">${(o.platforme || []).map((p) => `<span>${p === "ig" ? "IG" : "TT"}</span>`).join("")}</div>
   </button>`;
 }
-const vezObjave = (el) => el.querySelectorAll(".obj[data-o]").forEach((b) => (b.onclick = () => pokaziObjavo(b.dataset.o)));
+// Objava iz zaklenjene mape se odpre šele, ko mapo odkleneš.
+const vezObjave = (el) => el.querySelectorAll(".obj[data-o]").forEach((b) => (b.onclick = () => {
+  const o = S.objave.find((x) => x.id === b.dataset.o), m = o && mapa(o.mapa);
+  if (zaklenjena(m)) return pojdi("mapa", { mapa: m.id, zavihek: "objave" });
+  pokaziObjavo(b.dataset.o);
+}));
 
 function renderObjave() {
   const prih = S.objave.filter((o) => o.kdaj >= Date.now() - 6 * 3600e3 || !o.objavljeno);
@@ -497,8 +534,8 @@ function urediObjavo(o = {}, privzeto = {}) {
 /* =================== MAPA =================== */
 function prijaviMapo(id) {
   odjaviMapo();
-  osnutek.tn = osnutek.tz = "";
-  M.datoteke = []; M.gesla = []; M.opombe = []; M.naloge = []; M.nalozeno = false;
+  osnutek.tn = osnutek.tz = osnutek.opombe = osnutek.ideje = osnutek.skripte = osnutek.skripteN = "";
+  M.datoteke = []; M.gesla = []; M.opombe = []; M.ideje = []; M.skripte = []; M.naloge = []; M.nalozeno = false;
   mapaUnsub.push(onSnapshot(query(collection(db, "mape", id, "datoteke"), orderBy("ob", "desc")), (s) => {
     M.datoteke = s.docs.map((d) => ({ id: d.id, ...d.data() })); M.nalozeno = true;
     if (pot.zaslon === "mapa" && pot.mapa === id) osvezi();
@@ -511,9 +548,9 @@ function prijaviMapo(id) {
     M.naloge = s.docs.map((d) => ({ id: d.id, ...d.data() }));
     if (pot.zaslon === "mapa" && pot.mapa === id && pot.zavihek === "todo") osvezi();
   }, () => {}));
-  mapaUnsub.push(onSnapshot(query(collection(db, "mape", id, "opombe"), orderBy("ob", "desc")), (s) => {
-    M.opombe = s.docs.map((d) => ({ id: d.id, ...d.data() }));
-    if (pot.zaslon === "mapa" && pot.mapa === id && pot.zavihek === "opombe" && !document.activeElement?.matches?.("#on")) osvezi();
+  for (const vrsta of Object.keys(ZAPISKI)) mapaUnsub.push(onSnapshot(query(collection(db, "mape", id, vrsta), orderBy("ob", "desc")), (s) => {
+    M[vrsta] = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+    if (pot.zaslon === "mapa" && pot.mapa === id && pot.zavihek === vrsta) osvezi();
   }, () => {}));
 }
 function odjaviMapo() { mapaUnsub.splice(0).forEach((f) => f()); }
@@ -521,25 +558,28 @@ function odjaviMapo() { mapaUnsub.splice(0).forEach((f) => f()); }
 function renderMapa() {
   const m = mapa(pot.mapa);
   if (!m) { view.innerHTML = `<div class="center"><div class="spin"></div></div>`; return; }
+  if (zaklenjena(m)) return renderZaklenjenaMapa(m);
   const otroci = S.mape.filter((x) => x.oce === m.id).sort((a, b) => (a.red ?? 0) - (b.red ?? 0));
   const z = pot.zavihek;
-  const tabs = [["todo", "TO DO"], ["urejeno", "Urejeno"], ["surovo", "Surovo"], ["gesla", "Gesla"], ["opombe", "Opombe"], ["objave", "Objave"]];
+  const tabs = [["todo", "TO DO"], ["ideje", "Ideje"], ["urejeno", "Urejeno"], ["surovo", "Surovo"], ["gesla", "Gesla"], ["opombe", "Opombe"], ["skripte", "Skripte"], ["objave", "Objave"]];
   view.innerHTML = `
   <div class="top"><button class="iconbtn" id="nazaj" aria-label="Nazaj">${ico.nazaj}</button>
     <div class="grow"><h1>${esc(m.ime)}</h1></div>
     <button class="iconbtn" id="vec" aria-label="Več">${ico.vec}</button></div>
   ${m.url ? `<a class="small" href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.url.replace(/^https?:\/\//, ""))}</a>` : ""}
   ${otroci.length ? `<div class="sub">${otroci.map((c) => `<button class="box" data-m="${esc(c.id)}">${esc(c.ime)}</button>`).join("")}</div>` : ""}
-  <div class="tabs">${tabs.map(([k, n]) => `<button data-t="${k}" aria-pressed="${z === k}">${n}</button>`).join("")}</div>
-  <div id="vsebina"></div>`;
+  <div class="mapa-tel"><div class="tabs">${tabs.map(([k, n]) => `<button data-t="${k}" aria-pressed="${z === k}">${n}</button>`).join("")}</div>
+  <div id="vsebina"></div></div>`;
   $("nazaj").onclick = nazaj;
   $("vec").onclick = () => menuMape(m);
   view.querySelectorAll(".sub .box").forEach((b) => (b.onclick = () => pojdi("mapa", { mapa: b.dataset.m })));
   view.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => { pot.zavihek = b.dataset.t; osvezi(); }));
+  const t = view.querySelector('.tabs [aria-pressed="true"]'), tb = t?.parentElement;
+  if (t && tb.scrollWidth > tb.clientWidth) tb.scrollLeft = t.offsetLeft - (tb.clientWidth - t.offsetWidth) / 2;
   const el = $("vsebina");
   if (z === "urejeno" || z === "surovo") renderDatoteke(el, m, z);
   else if (z === "gesla") renderGesla(el, m);
-  else if (z === "opombe") renderOpombe(el, m);
+  else if (ZAPISKI[z]) renderZapiski(el, m, z);
   else if (z === "todo") renderNaloge(el, m);
   else {
     const moje = S.objave.filter((o) => o.mapa === m.id);
@@ -550,16 +590,62 @@ function renderMapa() {
   }
 }
 
+function renderZaklenjenaMapa(m) {
+  view.className = "";
+  view.innerHTML = `
+  <div class="top"><button class="iconbtn" id="nazaj" aria-label="Nazaj">${ico.nazaj}</button><div class="grow"><h1>${esc(m.ime)}</h1></div></div>
+  <div class="lock">${ico.kljucavnica}<p><b>Mapa je zaklenjena</b></p><p class="small muted">Vpiši geslo te mape. Geslo pozna ${esc(imeClana(m.zaklep.nastavil))}.</p></div>
+  <form id="zf"><input id="zg" type="password" autocomplete="off" placeholder="Geslo mape" autofocus>
+  <button class="btn" id="zo" type="submit">Odpri</button></form>`;
+  $("nazaj").onclick = nazaj;
+  $("zf").onsubmit = async (e) => {
+    e.preventDefault();
+    $("zo").disabled = true; $("zo").textContent = "Preverjam ...";
+    const ok = await pravilen(await kljucIzGesla($("zg").value, m.zaklep.sol), m.zaklep.preveri);
+    if (ok) { odklenjeneMape.add(m.id); osvezi(); }
+    else { $("zo").disabled = false; $("zo").textContent = "Odpri"; $("zg").value = ""; toast("Geslo ni pravo."); }
+  };
+}
+
+// Nastavi ali spremeni geslo mape. Shranimo samo sol in preveritveno vrednost, ne gesla.
+function geslMape(m) {
+  openSheet(`<h3>${m.zaklep ? "Spremeni geslo mape" : "Zakleni mapo z geslom"}</h3>
+    <p class="small muted">Kdor odpre ${esc(m.ime)}, bo moral vpisati to geslo. Povej ga tistim, ki naj mapo vidijo.</p>
+    <label for="zg1">Geslo mape (vsaj 4 znaki)</label><input id="zg1" type="password" autocomplete="new-password">
+    <label for="zg2">Še enkrat</label><input id="zg2" type="password" autocomplete="new-password">
+    <button class="btn" id="zgs">${m.zaklep ? "Shrani novo geslo" : "Zakleni"}</button>`, () => {
+    $("zgs").onclick = async () => {
+      const a = $("zg1").value, b = $("zg2").value;
+      if (a.length < 4) return toast("Vsaj 4 znaki.");
+      if (a !== b) return toast("Gesli se ne ujemata.");
+      $("zgs").disabled = true;
+      try {
+        const sol = novaSol(), k = await kljucIzGesla(a, sol);
+        await updateDoc(doc(db, "mape", m.id), { zaklep: { sol, preveri: await preveritev(k), nastavil: jaz, ob: Date.now() } });
+        odklenjeneMape.add(m.id); closeSheet(); toast(m.zaklep ? "Geslo spremenjeno" : "Mapa je zaklenjena");
+      } catch (e) { $("zgs").disabled = false; napaka(e); }
+    };
+  });
+}
+
 function menuMape(m) {
   openSheet(`<h3>${esc(m.ime)}</h3>
+    ${m.zaklep ? `<button class="btn ghost" id="mzz">Zakleni zdaj</button><button class="btn ghost" id="mzg">Spremeni geslo mape</button><button class="btn ghost" id="mzo">Odstrani geslo</button>`
+      : `<button class="btn ghost" id="mzg">Zakleni z geslom</button>`}
     <button class="btn ghost" id="mu">Uredi ime in povezavo</button>
     <button class="btn ghost" id="mp">Dodaj podmapo</button>
     <button class="btn danger" id="mb">Izbriši mapo</button>`, () => {
+    $("mzg").onclick = () => geslMape(m);
+    if ($("mzz")) $("mzz").onclick = () => { odklenjeneMape.delete(m.id); closeSheet(); osvezi(); };
+    if ($("mzo")) $("mzo").onclick = () => {
+      if (!confirm(`Odstranim geslo z mape ${m.ime}? Odpreti jo bo mogoče brez gesla.`)) return;
+      updateDoc(doc(db, "mape", m.id), { zaklep: deleteField() }).then(() => toast("Geslo odstranjeno")).catch(napaka); closeSheet();
+    };
     $("mu").onclick = () => urediMapo(m);
     $("mp").onclick = () => urediMapo(null, m.id);
     $("mb").onclick = async () => {
-      const [d, g, n, t] = await Promise.all(["datoteke", "gesla", "opombe", "naloge"].map((c) => getDocs(query(collection(db, "mape", m.id, c), limit(1)))));
-      if (!d.empty || !g.empty || !n.empty || !t.empty || S.mape.some((x) => x.oce === m.id)) return toast("Mapa ni prazna. Najprej odstrani naloge, vsebino, gesla, opombe in podmape.");
+      const [d, g, n, t, i, sk] = await Promise.all(["datoteke", "gesla", "opombe", "naloge", "ideje", "skripte"].map((c) => getDocs(query(collection(db, "mape", m.id, c), limit(1)))));
+      if (!d.empty || !g.empty || !n.empty || !t.empty || !i.empty || !sk.empty || S.mape.some((x) => x.oce === m.id)) return toast("Mapa ni prazna. Najprej odstrani naloge, ideje, vsebino, gesla, opombe, skripte in podmape.");
       if (!confirm(`Izbrišem mapo ${m.ime}?`)) return;
       closeSheet(); nazaj(); deleteDoc(doc(db, "mape", m.id)).catch(napaka);
       // samodejno dodana app se ne vrne, če jo izbrišeš
@@ -741,28 +827,44 @@ function pokaziDatoteko(id) {
 }
 
 /* ---------- TO DO s stroški ---------- */
+// Člani ekipe za izbiro, komu je naloga (Teo, Urška, Nives in kdor je dodan).
+const claniEkipe = () => [...new Set([...Object.keys(ZACETNI_CLANI), ...Object.keys(S.clani)])];
+const izbiraZa = (id, izbran) => `<div class="chips za" id="${id}">${claniEkipe().map((e) =>
+  `<button type="button" class="chip" data-za="${esc(e)}" style="--c:${barvaClana(e)}" aria-pressed="${izbran === e}">${esc(imeClana(e))}</button>`).join("")}
+  <button type="button" class="chip" data-za="" style="--c:#98a2b3" aria-pressed="${!izbran}">Vsi</button></div>`;
+function vezIzbiroZa(id, ob) {
+  document.querySelectorAll(`#${id} [data-za]`).forEach((b) => (b.onclick = () => {
+    document.querySelectorAll(`#${id} [data-za]`).forEach((x) => x.setAttribute("aria-pressed", x === b));
+    ob(b.dataset.za);
+  }));
+}
+const izbranZa = (id) => document.querySelector(`#${id} [aria-pressed="true"]`)?.dataset.za || "";
+const oznakaZa = (n) => `<span class="oseba" style="--c:${barvaClana(n.za)}">${esc(n.za ? imeClana(n.za) : "Vsi")}</span>`;
+
 function renderNaloge(el, m) {
   const odprte = M.naloge.filter((n) => !n.narejeno), narejene = M.naloge.filter((n) => n.narejeno);
   const vsota = (a) => a.reduce((s, n) => s + (n.strosek || 0), 0);
-  const vrstica = (n) => `<div class="item naloga${n.narejeno ? " done" : ""}">
+  const vrstica = (n) => `<div class="item naloga${n.narejeno ? " done" : ""}" style="--c:${barvaClana(n.za)}">
     <button class="kljuk" data-k="${esc(n.id)}" aria-label="${n.narejeno ? "Ni narejeno" : "Narejeno"}" aria-pressed="${!!n.narejeno}"></button>
-    <button class="grow" data-n="${esc(n.id)}"><div class="ob">${esc(n.besedilo)}</div><small>${esc(imeClana(n.uredil || n.dodal))} · ${esc(kdajBesedilo(n.ob))}</small></button>
+    <button class="grow" data-n="${esc(n.id)}"><div class="ob">${esc(n.besedilo)}</div><small>${oznakaZa(n)} ${esc(kdajBesedilo(n.ob))}</small></button>
     ${n.strosek ? `<span class="eur">${evri(n.strosek)}</span>` : ""}</div>`;
-  el.innerHTML = `<div class="opn"><textarea id="tn" maxlength="2000" placeholder="Kaj je treba narediti?"></textarea>
+  if (osnutek.za === undefined) osnutek.za = jaz;
+  el.innerHTML = `<div class="dvo"><div class="dvo-l"><div class="opn">${izbiraZa("tza", osnutek.za)}<textarea id="tn" maxlength="2000" placeholder="Kaj je treba narediti?"></textarea>
     <div class="row"><input id="tz" inputmode="decimal" placeholder="Strošek €"><button class="btn" id="tdd">Dodaj</button></div></div>
-    <div class="stroski"><div><small>Stroški skupaj</small><b>${evri(vsota(M.naloge))}</b></div><div><small>Še odprto</small><b>${evri(vsota(odprte))}</b></div></div>
-    <div class="list" style="margin-top:12px">${odprte.length ? odprte.map(vrstica).join("") : `<div class="empty">Ni odprtih nalog.</div>`}</div>
-    ${narejene.length ? `<h2>Narejeno</h2><div class="list">${narejene.map(vrstica).join("")}</div>` : ""}`;
+    <div class="stroski"><div><small>Stroški skupaj</small><b>${evri(vsota(M.naloge))}</b></div><div><small>Še odprto</small><b>${evri(vsota(odprte))}</b></div></div></div>
+    <div class="dvo-r"><div class="list" style="margin-top:12px">${odprte.length ? odprte.map(vrstica).join("") : `<div class="empty">Ni odprtih nalog.</div>`}</div>
+    ${narejene.length ? `<h2>Narejeno</h2><div class="list">${narejene.map(vrstica).join("")}</div>` : ""}</div></div>`;
   // Kar je vpisano, ostane tudi, ko se seznam osveži.
   $("tn").value = osnutek.tn || ""; $("tz").value = osnutek.tz || "";
   $("tn").oninput = () => (osnutek.tn = $("tn").value); $("tz").oninput = () => (osnutek.tz = $("tz").value);
+  vezIzbiroZa("tza", (za) => (osnutek.za = za));
   $("tdd").onclick = () => {
     const besedilo = $("tn").value.trim();
     if (!besedilo) return toast("Napiši, kaj je treba narediti.");
     // Polji izpraznimo takoj, da se medtem lahko že piše naslednja naloga.
     const strosek = znesek($("tz").value);
     $("tn").value = ""; $("tz").value = ""; osnutek.tn = osnutek.tz = "";
-    addDoc(collection(db, "mape", m.id, "naloge"), { besedilo, strosek, narejeno: false, dodal: jaz, ob: Date.now() }).catch(napaka);
+    addDoc(collection(db, "mape", m.id, "naloge"), { besedilo, strosek, za: izbranZa("tza"), narejeno: false, dodal: jaz, ob: Date.now() }).catch(napaka);
   };
   el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => {
     const n = M.naloge.find((x) => x.id === b.dataset.k);
@@ -775,13 +877,15 @@ function urediNalogo(m, n) {
   if (!n) return;
   openSheet(`<h3>Naloga</h3>
     <textarea id="te" maxlength="2000" style="min-height:110px">${esc(n.besedilo)}</textarea>
+    <label>Za koga</label>${izbiraZa("teza", n.za || "")}
     <label for="tez">Strošek €</label><input id="tez" inputmode="decimal" value="${n.strosek ? esc(String(n.strosek).replace(".", ",")) : ""}" placeholder="0,00">
-    <p class="small muted">${esc(imeClana(n.dodal))} · ${esc(kdajBesedilo(n.ob))}</p>
+    <p class="small muted">Vpisano: ${esc(imeClana(n.dodal))} · ${esc(kdajBesedilo(n.ob))}</p>
     <div class="row"><button class="btn" id="tes">Shrani</button><button class="btn danger" id="teb">Izbriši</button></div>`, () => {
+    vezIzbiroZa("teza", () => {});
     $("tes").onclick = () => {
       const besedilo = $("te").value.trim();
       if (!besedilo) return toast("Naloga je prazna.");
-      updateDoc(doc(db, "mape", m.id, "naloge", n.id), { besedilo, strosek: znesek($("tez").value), uredil: jaz }).catch(napaka); closeSheet();
+      updateDoc(doc(db, "mape", m.id, "naloge", n.id), { besedilo, strosek: znesek($("tez").value), za: izbranZa("teza"), uredil: jaz }).catch(napaka); closeSheet();
     };
     $("teb").onclick = () => {
       if (!confirm("Izbrišem nalogo?")) return;
@@ -791,36 +895,51 @@ function urediNalogo(m, n) {
 }
 
 /* ---------- opombe (skupne, vidijo jih vsi) ---------- */
-function renderOpombe(el, m) {
-  el.innerHTML = `<div class="opn"><textarea id="on" maxlength="4000" placeholder="Nova opomba za ${esc(m.ime)} ..."></textarea>
-    <button class="btn" id="os">Dodaj opombo</button></div>
-    <div class="list" style="margin-top:14px">${M.opombe.length ? M.opombe.map((o) => `<button class="item opomba" data-n="${esc(o.id)}"><div class="grow">
-      <div class="ob">${esc(o.besedilo)}</div><small>${esc(imeClana(o.uredil || o.dodal))} · ${esc(kdajBesedilo(o.ob))}</small></div></button>`).join("")
-      : `<div class="empty">Ideje, dogovori, kaj je še treba narediti ...</div>`}</div>`;
-  $("os").onclick = async () => {
-    const besedilo = $("on").value.trim();
-    if (!besedilo) return toast("Napiši opombo.");
-    $("os").disabled = true;
-    try { await addDoc(collection(db, "mape", m.id, "opombe"), { besedilo, dodal: jaz, ob: Date.now() }); $("on").value = ""; $("on").blur(); osvezi(); }
-    catch (e) { napaka(e); } finally { if ($("os")) $("os").disabled = false; }
+const ZAPISKI = {
+  opombe: { ena: "Opomba", dodaj: "Dodaj opombo", ph: "Nova opomba za", prazno: "Dogovori, pomembne stvari, kaj je že narejeno ..." },
+  ideje: { ena: "Ideja", dodaj: "Dodaj idejo", ph: "Nova ideja za", prazno: "Ideje za objave, reklame, nove funkcije ..." },
+  skripte: { ena: "Skripta", dodaj: "Dodaj skripto", ph: "Besedilo skripte za video ...", prazno: "Skripte za videe: kaj se reče in pokaže v posnetku.", naslov: true }
+};
+// Opombe in ideje: skupni zapiski, ki jih vidijo vsi.
+function renderZapiski(el, m, vrsta) {
+  const Z = ZAPISKI[vrsta], seznam = M[vrsta] || [];
+  el.innerHTML = `<div class="dvo"><div class="dvo-l"><div class="opn">${Z.naslov ? `<input id="onn" maxlength="120" placeholder="Naslov, npr. Reel: nov izgled">` : ""}
+    <textarea id="on" maxlength="${Z.naslov ? 20000 : 4000}" ${Z.naslov ? `style="min-height:140px"` : ""} placeholder="${esc(Z.ph)}${Z.naslov ? "" : ` ${esc(m.ime)} ...`}"></textarea>
+    <button class="btn" id="os">${Z.dodaj}</button></div></div>
+    <div class="dvo-r"><div class="list" style="margin-top:14px">${seznam.length ? seznam.map((o) => `<button class="item opomba${Z.naslov ? " skripta" : ""}" data-n="${esc(o.id)}"><div class="grow">
+      ${o.naslov ? `<div class="nsl">${esc(o.naslov)}</div>` : ""}<div class="ob">${esc(o.besedilo)}</div><small>${esc(imeClana(o.uredil || o.dodal))} · ${esc(kdajBesedilo(o.ob))}</small></div></button>`).join("")
+      : `<div class="empty">${Z.prazno}</div>`}</div></div></div>`;
+  $("on").value = osnutek[vrsta] || "";
+  $("on").oninput = () => (osnutek[vrsta] = $("on").value);
+  if ($("onn")) { $("onn").value = osnutek[vrsta + "N"] || ""; $("onn").oninput = () => (osnutek[vrsta + "N"] = $("onn").value); }
+  $("os").onclick = () => {
+    const besedilo = $("on").value.trim(), naslov = $("onn")?.value.trim() || "";
+    if (!besedilo) return toast("Najprej kaj napiši.");
+    $("on").value = ""; osnutek[vrsta] = "";
+    if ($("onn")) { $("onn").value = ""; osnutek[vrsta + "N"] = ""; }
+    addDoc(collection(db, "mape", m.id, vrsta), { ...(Z.naslov ? { naslov } : {}), besedilo, dodal: jaz, ob: Date.now() }).catch(napaka);
   };
-  el.querySelectorAll(".item[data-n]").forEach((b) => (b.onclick = () => urediOpombo(m, M.opombe.find((x) => x.id === b.dataset.n))));
+  el.querySelectorAll(".item[data-n]").forEach((b) => (b.onclick = () => urediZapisek(m, vrsta, seznam.find((x) => x.id === b.dataset.n))));
 }
 
-function urediOpombo(m, o) {
+function urediZapisek(m, vrsta, o) {
   if (!o) return;
-  openSheet(`<h3>Opomba</h3>
-    <textarea id="oe" maxlength="4000" style="min-height:160px">${esc(o.besedilo)}</textarea>
+  const Z = ZAPISKI[vrsta];
+  openSheet(`<h3>${Z.ena}</h3>
+    ${Z.naslov ? `<input id="oen" maxlength="120" placeholder="Naslov" value="${esc(o.naslov || "")}">` : ""}
+    <textarea id="oe" maxlength="${Z.naslov ? 20000 : 4000}" style="min-height:${Z.naslov ? 300 : 160}px">${esc(o.besedilo)}</textarea>
     <p class="small muted">${esc(imeClana(o.dodal))} · ${esc(kdajBesedilo(o.ob))}</p>
+    ${Z.naslov ? `<button class="btn ghost" id="oek">Kopiraj besedilo</button>` : ""}
     <div class="row"><button class="btn" id="oes">Shrani</button><button class="btn danger" id="oeb">Izbriši</button></div>`, () => {
+    if ($("oek")) $("oek").onclick = () => kopiraj($("oe").value);
     $("oes").onclick = () => {
       const besedilo = $("oe").value.trim();
-      if (!besedilo) return toast("Opomba je prazna.");
-      updateDoc(doc(db, "mape", m.id, "opombe", o.id), { besedilo, uredil: jaz, ob: Date.now() }).catch(napaka); closeSheet();
+      if (!besedilo) return toast("Prazno.");
+      updateDoc(doc(db, "mape", m.id, vrsta, o.id), { ...(Z.naslov ? { naslov: $("oen").value.trim() } : {}), besedilo, uredil: jaz, ob: Date.now() }).catch(napaka); closeSheet();
     };
     $("oeb").onclick = () => {
-      if (!confirm("Izbrišem opombo?")) return;
-      deleteDoc(doc(db, "mape", m.id, "opombe", o.id)).catch(napaka); closeSheet();
+      if (!confirm(`Izbrišem: ${Z.ena.toLowerCase()}?`)) return;
+      deleteDoc(doc(db, "mape", m.id, vrsta, o.id)).catch(napaka); closeSheet();
     };
   });
 }
@@ -1015,5 +1134,9 @@ function renderNastavitve() {
     if (!u.emailVerified) return renderPotrdi(u);
     zacni(u);
   });
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && jaz) { planirajObvestila(); osvezi(); } });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { skritoOd = Date.now(); return; }
+    if (skritoOd && Date.now() - skritoOd > 60e3) odklenjeneMape.clear();
+    if (jaz) { planirajObvestila(); osvezi(); }
+  });
 })();

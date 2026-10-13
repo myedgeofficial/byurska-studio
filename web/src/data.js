@@ -17,6 +17,12 @@ export const ZACETNE_MAPE = [
   { id: "sentinel", ime: "Sentinel", oce: "apps", red: 13 }
 ];
 
+// Barve članov za naloge: Teo neon zelena, Nives modra, Urška roza; ostali sivi.
+export const BARVE_CLANOV = { "teo.simonic7@gmail.com": "#39ff14", "nives.ploj@gmail.com": "#2e7cf6", "urska.repusic@gmail.com": "#e2459b" };
+export const barvaClana = (e) => BARVE_CLANOV[String(e || "").toLowerCase()] || "#98a2b3";
+// Komu je naloga: polje »za« (e-pošta) ali prazno = vsem. Stare naloge brez polja so za vse.
+export const nalogaZa = (n, email) => !n.za || n.za === String(email || "").toLowerCase();
+
 export const PLATFORME = [["ig", "Instagram"], ["tiktok", "TikTok"]];
 export const platformeIme = (p = []) => PLATFORME.filter(([k]) => p.includes(k)).map(([, n]) => n).join(" + ") || "Objava";
 

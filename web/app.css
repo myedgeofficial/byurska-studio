@@ -134,7 +134,7 @@ input[type="date"], input[type="time"] { min-height: 48px; }
 /* mapa */
 .tabs { display: flex; background: #e9ebf0; border-radius: 12px; padding: 3px; margin: 14px 0 6px; overflow-x: auto; scrollbar-width: none; }
 .tabs::-webkit-scrollbar { display: none; }
-.tabs button { flex: 1 0 auto; padding: 8px 6px; border-radius: 9px; font-size: 13px; white-space: nowrap; color: var(--muted); }
+.tabs button { flex: 1 0 auto; padding: 8px 8px; border-radius: 9px; font-size: 13.5px; white-space: nowrap; color: var(--muted); }
 .tabs button[aria-pressed="true"] { background: var(--panel); box-shadow: var(--shadow); color: var(--text); font-weight: 600; }
 .sub { display: flex; gap: 8px; overflow-x: auto; margin: 10px -16px 0; padding: 0 16px; scrollbar-width: none; }
 .sub::-webkit-scrollbar { display: none; }
@@ -215,4 +215,60 @@ input[type="date"], input[type="time"] { min-height: 48px; }
   .sheet-box .grab { display: none; }
   .grid { grid-template-columns: repeat(5, 1fr); }
   .root { width: 150px; }
+}
+
+/* mapa z lastnim geslom */
+.kl { flex: none; display: inline-flex; color: var(--muted); }
+.kl svg { width: 16px; height: 16px; }
+.root .kl { color: #fff; vertical-align: -2px; }
+.root .kl svg { width: 13px; height: 13px; }
+#zf { max-width: 420px; margin: 0 auto; }
+.item.skripta .nsl { font-weight: 600; margin-bottom: 2px; white-space: normal; }
+.item.skripta .ob { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; color: var(--muted); font-size: 14px; }
+.opn input { margin: 0 0 8px; }
+
+/* naloge po osebah: barva traku in oznake (besedilo temnejše, da je berljivo tudi na neon zeleni) */
+.item.naloga { box-shadow: inset 4px 0 0 var(--c, #98a2b3); }
+.item.naloga .kljuk { border-color: var(--c, #c4cad6); }
+.item.naloga .kljuk[aria-pressed="true"] { background: var(--c); border-color: var(--c); }
+.item.naloga .kljuk[aria-pressed="true"]::after { border-color: color-mix(in srgb, var(--c) 25%, #101828); }
+.oseba { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; margin-right: 4px;
+  background: color-mix(in srgb, var(--c) 22%, #fff); color: color-mix(in srgb, var(--c) 45%, #101828); }
+.chips.za { margin: 0 0 8px; }
+.chips.za .chip[aria-pressed="true"] { background: var(--c); border-color: var(--c); color: color-mix(in srgb, var(--c) 20%, #101828); }
+.chips.za .chip[aria-pressed="true"][style*="#2e7cf6"], .chips.za .chip[aria-pressed="true"][style*="#e2459b"] { color: #fff; }
+.pika-oseba { display: inline-block; width: 10px; height: 10px; border-radius: 5px; background: var(--c); margin-right: 7px; vertical-align: 0; }
+.list.moje { margin-top: 0; }
+
+/* Telefon: en stolpec v pravem vrstnem redu (pregled, moje naloge, mape, objave). */
+.dom { display: flex; flex-direction: column; }
+.dom-side { display: contents; }
+.dom .stat { order: 1; } .dom .next.hero { order: 2; } .dom .d-moje { order: 3; } .dom .map { order: 4; } .dom .d-obj { order: 5; }
+
+/* Računalnik: čez cel zaslon. Levo pregled, naloge in objave, desno skupine map ena ob drugi. */
+@media (min-width: 1100px) {
+  main { max-width: 1680px; padding: 28px 40px 40px; }
+  .domov { padding-bottom: 40px; }
+  .dom { display: grid; grid-template-columns: minmax(360px, 420px) 1fr; gap: 32px; align-items: start; }
+  .dom-side { display: flex; flex-direction: column; position: sticky; top: 20px; }
+  .dom-side > * { order: 0 !important; }
+  .dom .map { margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 20px; align-content: start; background: none; }
+  .dom .grp { margin: 0; align-self: start; }
+  .dom .addmap { grid-column: 1 / -1; }
+  .fab { left: auto; right: 40px; transform: none; bottom: 32px; }
+  .fab:active { transform: scale(.97); }
+  /* mapa: zavihki levo kot meni, vsebina desno */
+  .mapa-tel { display: grid; grid-template-columns: 200px 1fr; gap: 28px; align-items: start; margin-top: 18px; }
+  .mapa-tel .tabs { flex-direction: column; background: none; padding: 0; margin: 0; gap: 2px; position: sticky; top: 20px; overflow: visible; }
+  .mapa-tel .tabs button { flex: none; text-align: left; padding: 11px 14px; font-size: 15px; border-radius: 10px; }
+  .mapa-tel .tabs button:hover { background: #e9ebf0; }
+  #vsebina .grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+  #vsebina .grid .tile { border-radius: 12px; }
+  .dvo { display: grid; grid-template-columns: minmax(320px, 400px) 1fr; gap: 24px; align-items: start; }
+  .dvo-l { position: sticky; top: 20px; }
+  .dvo-r > .list:first-child { margin-top: 0 !important; }
+  .dvo-r h2:first-child { margin-top: 0; }
+  .dvo-l .opn .row { flex-direction: column; }
+  .dvo-l textarea { min-height: 120px; }
+  .sub { margin: 10px 0 0; padding: 0; flex-wrap: wrap; }
 }
