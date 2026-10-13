@@ -272,3 +272,4 @@ input[type="date"], input[type="time"] { min-height: 48px; }
   .dvo-l textarea { min-height: 120px; }
   .sub { margin: 10px 0 0; padding: 0; flex-wrap: wrap; }
 }
+.box { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }

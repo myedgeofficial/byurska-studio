@@ -290,7 +290,10 @@ function osvezi() {
   if (pot.zaslon === "mapa" && !mapa(pot.mapa) && S.nalozeno) { pot.zaslon = "domov"; odjaviMapo(); }
   // Če nekdo piše, mu osvežitev ne sme vzeti fokusa (tipkovnica bi se zaprla).
   const f = document.activeElement, fid = f && view.contains(f) && f.id, sel = fid && "selectionStart" in f ? [f.selectionStart, f.selectionEnd] : null;
+  // Tudi vpisano besedilo (npr. geslo mape) ostane, če se zaslon vmes osveži zaradi sprememb drugih.
+  const vpisano = [...view.querySelectorAll("input[id], textarea[id]")].filter((x) => x.type !== "file" && x.value).map((x) => [x.id, x.value]);
   ({ domov: renderDomov, mapa: renderMapa, objave: renderObjave, nastavitve: renderNastavitve })[pot.zaslon]();
+  for (const [id, v] of vpisano) { const x = document.getElementById(id); if (x && view.contains(x) && !x.value && x.type !== "file") x.value = v; }
   const n = fid && document.getElementById(fid);
   if (n && n !== document.activeElement && /^(INPUT|TEXTAREA)$/.test(n.tagName)) { n.focus({ preventScroll: true }); if (sel) try { n.setSelectionRange(...sel); } catch {} }
 }
@@ -357,7 +360,14 @@ function renderDomov() {
   view.querySelectorAll("[data-dodaj]").forEach((b) => (b.onclick = () => urediMapo(null, b.dataset.dodaj)));
   $("nova").onclick = () => urediObjavo();
   $("vse").onclick = $("st1").onclick = () => pojdi("objave");
-  view.querySelectorAll(".box[data-m]").forEach((b) => (b.onclick = () => pojdi("mapa", { mapa: b.dataset.m })));
+  view.querySelectorAll(".box[data-m]").forEach((b) => {
+    b.onclick = () => { if (b.dataset.dolg) return delete b.dataset.dolg; pojdi("mapa", { mapa: b.dataset.m }); };
+    // Desni klik na računalniku ali dolg pritisk na telefonu odpre meni mape (zaklep, ime, podmapa, brisanje).
+    b.oncontextmenu = (e) => { e.preventDefault(); const m = mapa(b.dataset.m); if (m) menuMape(m, true); };
+    let t;
+    b.addEventListener("touchstart", () => { t = setTimeout(() => { b.dataset.dolg = "1"; const m = mapa(b.dataset.m); if (m) menuMape(m, true); }, 550); }, { passive: true });
+    for (const ev of ["touchend", "touchmove", "touchcancel"]) b.addEventListener(ev, () => clearTimeout(t), { passive: true });
+  });
   vezObjave(view);
   vezMojeNaloge();
   requestAnimationFrame(narisiCrte);
@@ -602,7 +612,8 @@ function renderZaklenjenaMapa(m) {
     e.preventDefault();
     $("zo").disabled = true; $("zo").textContent = "Preverjam ...";
     const ok = await pravilen(await kljucIzGesla($("zg").value, m.zaklep.sol), m.zaklep.preveri);
-    if (ok) { odklenjeneMape.add(m.id); osvezi(); }
+    // Mape z istim geslom (»za vse mape«) se odklenejo skupaj.
+    if (ok) { S.mape.filter((x) => x.zaklep?.sol === m.zaklep.sol).forEach((x) => odklenjeneMape.add(x.id)); odklenjeneMape.add(m.id); osvezi(); }
     else { $("zo").disabled = false; $("zo").textContent = "Odpri"; $("zg").value = ""; toast("Geslo ni pravo."); }
   };
 }
@@ -613,28 +624,42 @@ function geslMape(m) {
     <p class="small muted">Kdor odpre ${esc(m.ime)}, bo moral vpisati to geslo. Povej ga tistim, ki naj mapo vidijo.</p>
     <label for="zg1">Geslo mape (vsaj 4 znaki)</label><input id="zg1" type="password" autocomplete="new-password">
     <label for="zg2">Še enkrat</label><input id="zg2" type="password" autocomplete="new-password">
+    <label>Za katere mape</label>
+    <div class="chips" id="zgk"><button type="button" class="chip" data-k="ena" aria-pressed="true">Samo ${esc(kratkoIme(m.ime).ime)}</button><button type="button" class="chip" data-k="vse" aria-pressed="false">Vse mape</button></div>
     <button class="btn" id="zgs">${m.zaklep ? "Shrani novo geslo" : "Zakleni"}</button>`, () => {
+    document.querySelectorAll("#zgk [data-k]").forEach((c) => (c.onclick = () => document.querySelectorAll("#zgk [data-k]").forEach((x) => x.setAttribute("aria-pressed", x === c))));
     $("zgs").onclick = async () => {
       const a = $("zg1").value, b = $("zg2").value;
+      const vse = document.querySelector('#zgk [aria-pressed="true"]')?.dataset.k === "vse";
       if (a.length < 4) return toast("Vsaj 4 znaki.");
       if (a !== b) return toast("Gesli se ne ujemata.");
       $("zgs").disabled = true;
       try {
         const sol = novaSol(), k = await kljucIzGesla(a, sol);
-        await updateDoc(doc(db, "mape", m.id), { zaklep: { sol, preveri: await preveritev(k), nastavil: jaz, ob: Date.now() } });
-        odklenjeneMape.add(m.id); closeSheet(); toast(m.zaklep ? "Geslo spremenjeno" : "Mapa je zaklenjena");
+        const zaklep = { sol, preveri: await preveritev(k), nastavil: jaz, ob: Date.now() };
+        // »Vse mape«: tudi vse ostale, razen tistih, ki imajo drugo geslo in jih na tej napravi nisi odklenil.
+        const cilj = vse ? S.mape.filter((x) => x.id === m.id || !zaklenjena(x)) : [m];
+        const wb = writeBatch(db);
+        cilj.forEach((x) => wb.update(doc(db, "mape", x.id), { zaklep }));
+        await wb.commit();
+        cilj.forEach((x) => odklenjeneMape.add(x.id));
+        closeSheet(); toast(vse ? `Zaklenjenih map: ${cilj.length}` : m.zaklep ? "Geslo spremenjeno" : "Mapa je zaklenjena");
       } catch (e) { $("zgs").disabled = false; napaka(e); }
     };
   });
 }
 
-function menuMape(m) {
+function menuMape(m, izDomov = false) {
+  if (zaklenjena(m)) return openSheet(`<h3>${esc(m.ime)}</h3><p class="small muted">Mapa je zaklenjena. Odpri jo z geslom, nato lahko geslo spremeniš ali odstraniš.</p>
+    <button class="btn" id="mo">Odpri z geslom</button>`, () => { $("mo").onclick = () => { closeSheet(); pojdi("mapa", { mapa: m.id }); }; });
   openSheet(`<h3>${esc(m.ime)}</h3>
+    ${izDomov ? `<button class="btn" id="mo">Odpri</button>` : ""}
     ${m.zaklep ? `<button class="btn ghost" id="mzz">Zakleni zdaj</button><button class="btn ghost" id="mzg">Spremeni geslo mape</button><button class="btn ghost" id="mzo">Odstrani geslo</button>`
       : `<button class="btn ghost" id="mzg">Zakleni z geslom</button>`}
     <button class="btn ghost" id="mu">Uredi ime in povezavo</button>
     <button class="btn ghost" id="mp">Dodaj podmapo</button>
     <button class="btn danger" id="mb">Izbriši mapo</button>`, () => {
+    if ($("mo")) $("mo").onclick = () => { closeSheet(); pojdi("mapa", { mapa: m.id }); };
     $("mzg").onclick = () => geslMape(m);
     if ($("mzz")) $("mzz").onclick = () => { odklenjeneMape.delete(m.id); closeSheet(); osvezi(); };
     if ($("mzo")) $("mzo").onclick = () => {
@@ -647,7 +672,7 @@ function menuMape(m) {
       const [d, g, n, t, i, sk] = await Promise.all(["datoteke", "gesla", "opombe", "naloge", "ideje", "skripte"].map((c) => getDocs(query(collection(db, "mape", m.id, c), limit(1)))));
       if (!d.empty || !g.empty || !n.empty || !t.empty || !i.empty || !sk.empty || S.mape.some((x) => x.oce === m.id)) return toast("Mapa ni prazna. Najprej odstrani naloge, ideje, vsebino, gesla, opombe, skripte in podmape.");
       if (!confirm(`Izbrišem mapo ${m.ime}?`)) return;
-      closeSheet(); nazaj(); deleteDoc(doc(db, "mape", m.id)).catch(napaka);
+      closeSheet(); if (pot.zaslon === "mapa") nazaj(); deleteDoc(doc(db, "mape", m.id)).catch(napaka);
       // samodejno dodana app se ne vrne, če jo izbrišeš
       if (m.repo) setDoc(doc(db, "nastavitve", "samodejno"), { izpusti: arrayUnion(m.repo.toLowerCase()) }, { merge: true }).catch(() => {});
     };
