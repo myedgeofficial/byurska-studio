@@ -38,6 +38,8 @@ jobs:
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
           FB="npx --yes firebase-tools@14 --project $P --non-interactive"
           export STUDIO_FB_CONFIG=$($FB apps:sdkconfig WEB --json | python3 app/scripts/fb-config.py "$P.firebasestorage.app")
+          # Javni spletni ključ (je tudi v objavljeni strani) za orodja/teo-naloge.mjs.
+          echo "SPLETNI_KLJUC=$(printf '%s' "$STUDIO_FB_CONFIG" | python3 -c 'import json,sys;print(json.load(sys.stdin)["apiKey"])')"
           (cd app && npm ci && node scripts/build-www.js)
           test -f app/www/index.html && rm -rf firebase/www && cp -r app/www firebase/www
           cd firebase
