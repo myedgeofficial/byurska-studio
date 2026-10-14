@@ -225,7 +225,11 @@ async function zacni(u) {
   // Odprte naloge vseh map za pregled na domačem zaslonu.
   globalne.push(onSnapshot(collectionGroup(db, "naloge"), (s) => {
     const po = {};
-    S.vseNaloge = s.docs.map((d) => ({ id: d.id, mapa: d.ref.parent.parent?.id, ...d.data() })).filter((n) => n.mapa && !n.narejeno).sort((a, b) => a.ob - b.ob);
+    const vse = s.docs.map((d) => ({ id: d.id, mapa: d.ref.parent.parent?.id, ...d.data() })).filter((n) => n.mapa);
+    S.vseNaloge = vse.filter((n) => !n.narejeno).sort((a, b) => a.ob - b.ob);
+    // Opravljeno delo drugih (zadnjih 14 dni), ki ga še nisem pregledal.
+    S.zaPregled = vse.filter((n) => n.narejeno && n.narejenoOb > Date.now() - 14 * 864e5 && n.narejenoKdo && n.narejenoKdo !== jaz && !(n.pregledal || []).includes(jaz))
+      .sort((a, b) => b.narejenoOb - a.narejenoOb);
     for (const d of s.docs) {
       const n = d.data(), id = d.ref.parent.parent?.id;
       if (!id || n.narejeno) continue;
@@ -340,7 +344,7 @@ function renderDomov() {
     <div><small>Odprti stroški</small><b>${evri(vseNal.eur).replace(",00 €", " €")}</b></div>
   </div>
   ${prih[0] ? `<div class="next hero"><div class="nextlbl">Naslednja objava</div>${vrsticaObjave(prih[0])}</div>` : ""}
-  <div class="d-moje">${mojeNaloge()}</div>
+  <div class="d-moje">${mojeNaloge()}${zaPregled()}</div>
   <div class="d-obj"><div class="h2row"><h2>Prihajajoče objave</h2><button id="vse">Vse</button></div>
   <div class="next">${prih.length ? prih.slice(0, 5).map(vrsticaObjave).join("") : `<div class="empty">Ni načrtovanih objav.</div>`}</div></div>
   </div>
@@ -370,6 +374,7 @@ function renderDomov() {
   });
   vezObjave(view);
   vezMojeNaloge();
+  vezPregled(view);
   requestAnimationFrame(narisiCrte);
 }
 
@@ -379,7 +384,6 @@ const mojePrikaz = { skrito: (() => { try { return localStorage.getItem("mojeSkr
 function mojeNaloge() {
   const moje = S.vseNaloge.filter((n) => nalogaZa(n, jaz) && mapa(n.mapa) && !zaklenjena(mapa(n.mapa)));
   const prikaz = mojePrikaz.vse ? moje : moje.slice(0, 5);
-  const prvaVrstica = (t) => String(t).split("\n").map((x) => x.trim()).find(Boolean) || "";
   return `<button class="h2row moje-glava" id="mojeG" aria-expanded="${!mojePrikaz.skrito}"><h2><span class="pika-oseba" style="--c:${barvaClana(jaz)}"></span>Moje naloge${moje.length ? ` <span class="st">${moje.length}</span>` : ""}</h2><span class="chev2">${ico.chev}</span></button>
   ${mojePrikaz.skrito ? "" : `<div class="list moje">${prikaz.length ? prikaz.map((n) => {
     const odprta = mojePrikaz.odprte.has(n.id), vec = String(n.besedilo).trim().includes("\n") || String(n.besedilo).length > 70;
@@ -403,9 +407,33 @@ function vezMojeNaloge() {
   view.querySelectorAll("[data-mk]").forEach((b) => (b.onclick = () => {
     const [mid, nid] = b.dataset.mk.split("/");
     b.setAttribute("aria-pressed", "true");
-    updateDoc(doc(db, "mape", mid, "naloge", nid), { narejeno: true, uredil: jaz }).then(() => toast("Narejeno")).catch(napaka);
+    updateDoc(doc(db, "mape", mid, "naloge", nid), { ...oznaciNarejeno(true), uredil: jaz }).then(() => toast("Narejeno")).catch(napaka);
   }));
   view.querySelectorAll("[data-mm]").forEach((b) => (b.onclick = () => pojdi("mapa", { mapa: b.dataset.mm, zavihek: "todo" })));
+}
+
+const oznaciNarejeno = (da) => (da ? { narejeno: true, narejenoKdo: jaz, narejenoOb: Date.now(), pregledal: [] } : { narejeno: false, pregledal: [] });
+const prvaVrstica = (t) => String(t).split("\n").map((x) => x.trim()).find(Boolean) || "";
+
+// Opravljeno delo drugih, da ga ostali vidijo in potrdijo.
+function zaPregled() {
+  const za = (S.zaPregled || []).filter((n) => mapa(n.mapa) && !zaklenjena(mapa(n.mapa)));
+  if (!za.length) return "";
+  return `<h2 class="pregled-h">Za pregled <span class="st">${za.length}</span></h2><div class="list moje">${za.map((n) => {
+    const odprta = mojePrikaz.odprte.has(n.id), vec = String(n.besedilo).trim().includes("\n") || String(n.besedilo).length > 70 || !!n.porocilo;
+    return `<div class="mn${odprta ? " odprta" : ""}" style="--c:${barvaClana(n.narejenoKdo)}"><div class="mn-b">
+    <button class="mn-t" data-mo="${esc(n.id)}">${esc(odprta ? n.besedilo : prvaVrstica(n.besedilo))}${vec && !odprta ? " …" : ""}</button>
+    ${odprta && n.porocilo ? `<div class="porocilo">${esc(n.porocilo)}</div>` : ""}
+    <small><span class="oseba" style="--c:${barvaClana(n.narejenoKdo)}">${esc(imeClana(n.narejenoKdo))}</span>${esc(kdajBesedilo(n.narejenoOb))} · <button class="mn-mm" data-mm="${esc(n.mapa)}">${esc(kratkoIme(imeMape(n.mapa)).ime)}</button></small></div>
+    <button class="pregledano" data-pr="${esc(n.mapa)}/${esc(n.id)}">Pregledano</button></div>`;
+  }).join("")}</div>`;
+}
+function vezPregled(el) {
+  el.querySelectorAll("[data-pr]").forEach((b) => (b.onclick = () => {
+    const [mid, nid] = b.dataset.pr.split("/");
+    b.disabled = true;
+    updateDoc(doc(db, "mape", mid, "naloge", nid), { pregledal: arrayUnion(jaz) }).then(() => toast("Pregledano")).catch(napaka);
+  }));
 }
 
 // Črte kot na skici: od skupine do vsake mape, z mehkim zavojem.
@@ -883,31 +911,44 @@ const oznakaZa = (n) => `<span class="oseba" style="--c:${barvaClana(n.za)}">${e
 function renderNaloge(el, m) {
   const odprte = M.naloge.filter((n) => !n.narejeno), narejene = M.naloge.filter((n) => n.narejeno);
   const vsota = (a) => a.reduce((s, n) => s + (n.strosek || 0), 0);
-  const vrstica = (n) => `<div class="item naloga${n.narejeno ? " done" : ""}" style="--c:${barvaClana(n.za)}">
+  const stanje = (n) => {
+    if (!n.narejeno) return `${oznakaZa(n)} ${esc(kdajBesedilo(n.ob))}`;
+    const kdo = n.narejenoKdo || n.uredil, pr = (n.pregledal || []).filter((e) => e !== kdo);
+    return `Opravljeno: <span class="oseba" style="--c:${barvaClana(kdo)}">${esc(imeClana(kdo))}</span>${n.narejenoOb ? esc(kdajBesedilo(n.narejenoOb)) : ""}
+      ${pr.length ? ` · <span class="ok">Pregledano: ${esc(pr.map(imeClana).join(", "))}</span>` : n.narejenoKdo ? ` · <span class="caka">Čaka pregled</span>` : ""}`;
+  };
+  const lahkoPregledam = (n) => n.narejeno && n.narejenoKdo && n.narejenoKdo !== jaz && !(n.pregledal || []).includes(jaz);
+  const vrstica = (n) => `<div class="item naloga${n.narejeno ? " done" : ""}" style="--c:${barvaClana(n.narejeno ? n.narejenoKdo || n.za : n.za)}">
     <button class="kljuk" data-k="${esc(n.id)}" aria-label="${n.narejeno ? "Ni narejeno" : "Narejeno"}" aria-pressed="${!!n.narejeno}"></button>
-    <button class="grow" data-n="${esc(n.id)}"><div class="ob">${esc(n.besedilo)}</div><small>${oznakaZa(n)} ${esc(kdajBesedilo(n.ob))}</small></button>
+    <button class="grow" data-n="${esc(n.id)}"><div class="ob">${esc(n.besedilo)}</div>${n.porocilo ? `<div class="porocilo">${esc(n.porocilo)}</div>` : ""}<small>${stanje(n)}</small></button>
+    ${lahkoPregledam(n) ? `<button class="pregledano" data-pr="${esc(m.id)}/${esc(n.id)}">Pregledano</button>` : ""}
     ${n.strosek ? `<span class="eur">${evri(n.strosek)}</span>` : ""}</div>`;
   if (osnutek.za === undefined) osnutek.za = jaz;
   el.innerHTML = `<div class="dvo"><div class="dvo-l"><div class="opn">${izbiraZa("tza", osnutek.za)}<textarea id="tn" maxlength="2000" placeholder="Kaj je treba narediti?"></textarea>
-    <div class="row"><input id="tz" inputmode="decimal" placeholder="Strošek €"><button class="btn" id="tdd">Dodaj</button></div></div>
+    <div class="row"><input id="tz" inputmode="decimal" placeholder="Strošek €"><button class="btn" id="tdd">Dodaj</button></div>
+    <button class="btn ghost full" id="tdn" title="Vpiši delo, ki si ga že opravil, da ga drugi pregledajo">Vpiši kot opravljeno</button></div>
     <div class="stroski"><div><small>Stroški skupaj</small><b>${evri(vsota(M.naloge))}</b></div><div><small>Še odprto</small><b>${evri(vsota(odprte))}</b></div></div></div>
     <div class="dvo-r"><div class="list" style="margin-top:12px">${odprte.length ? odprte.map(vrstica).join("") : `<div class="empty">Ni odprtih nalog.</div>`}</div>
-    ${narejene.length ? `<h2>Narejeno</h2><div class="list">${narejene.map(vrstica).join("")}</div>` : ""}</div></div>`;
+    ${narejene.length ? `<h2>Opravljeno</h2><div class="list">${narejene.map(vrstica).join("")}</div>` : ""}</div></div>`;
   // Kar je vpisano, ostane tudi, ko se seznam osveži.
   $("tn").value = osnutek.tn || ""; $("tz").value = osnutek.tz || "";
   $("tn").oninput = () => (osnutek.tn = $("tn").value); $("tz").oninput = () => (osnutek.tz = $("tz").value);
   vezIzbiroZa("tza", (za) => (osnutek.za = za));
-  $("tdd").onclick = () => {
+  const dodaj = (opravljeno) => {
     const besedilo = $("tn").value.trim();
-    if (!besedilo) return toast("Napiši, kaj je treba narediti.");
+    if (!besedilo) return toast(opravljeno ? "Napiši, kaj je narejeno." : "Napiši, kaj je treba narediti.");
     // Polji izpraznimo takoj, da se medtem lahko že piše naslednja naloga.
     const strosek = znesek($("tz").value);
     $("tn").value = ""; $("tz").value = ""; osnutek.tn = osnutek.tz = "";
-    addDoc(collection(db, "mape", m.id, "naloge"), { besedilo, strosek, za: izbranZa("tza"), narejeno: false, dodal: jaz, ob: Date.now() }).catch(napaka);
+    addDoc(collection(db, "mape", m.id, "naloge"), { besedilo, strosek, za: izbranZa("tza"), dodal: jaz, ob: Date.now(), ...oznaciNarejeno(opravljeno) })
+      .then(() => opravljeno && toast("Vpisano, drugi ga vidijo za pregled")).catch(napaka);
   };
+  $("tdd").onclick = () => dodaj(false);
+  $("tdn").onclick = () => dodaj(true);
+  vezPregled(el);
   el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => {
     const n = M.naloge.find((x) => x.id === b.dataset.k);
-    if (n) updateDoc(doc(db, "mape", m.id, "naloge", n.id), { narejeno: !n.narejeno, uredil: jaz }).catch(napaka);
+    if (n) updateDoc(doc(db, "mape", m.id, "naloge", n.id), { ...oznaciNarejeno(!n.narejeno), uredil: jaz }).catch(napaka);
   }));
   el.querySelectorAll("[data-n]").forEach((b) => (b.onclick = () => urediNalogo(m, M.naloge.find((x) => x.id === b.dataset.n))));
 }
@@ -918,13 +959,14 @@ function urediNalogo(m, n) {
     <textarea id="te" maxlength="2000" style="min-height:110px">${esc(n.besedilo)}</textarea>
     <label>Za koga</label>${izbiraZa("teza", n.za || "")}
     <label for="tez">Strošek €</label><input id="tez" inputmode="decimal" value="${n.strosek ? esc(String(n.strosek).replace(".", ",")) : ""}" placeholder="0,00">
+    ${n.narejeno ? `<label for="tep">Kaj je bilo narejeno (za pregled)</label><textarea id="tep" maxlength="2000" placeholder="Povezava, kje je, kaj naj pogledajo ...">${esc(n.porocilo || "")}</textarea>` : ""}
     <p class="small muted">Vpisano: ${esc(imeClana(n.dodal))} · ${esc(kdajBesedilo(n.ob))}</p>
     <div class="row"><button class="btn" id="tes">Shrani</button><button class="btn danger" id="teb">Izbriši</button></div>`, () => {
     vezIzbiroZa("teza", () => {});
     $("tes").onclick = () => {
       const besedilo = $("te").value.trim();
       if (!besedilo) return toast("Naloga je prazna.");
-      updateDoc(doc(db, "mape", m.id, "naloge", n.id), { besedilo, strosek: znesek($("tez").value), za: izbranZa("teza"), uredil: jaz }).catch(napaka); closeSheet();
+      updateDoc(doc(db, "mape", m.id, "naloge", n.id), { besedilo, strosek: znesek($("tez").value), za: izbranZa("teza"), ...($("tep") ? { porocilo: $("tep").value.trim() } : {}), uredil: jaz }).catch(napaka); closeSheet();
     };
     $("teb").onclick = () => {
       if (!confirm("Izbrišem nalogo?")) return;

@@ -294,3 +294,19 @@ input[type="date"], input[type="time"] { min-height: 48px; }
 /* računalnik: skupine se ne smejo raztegniti čez rob */
 .dom > * { min-width: 0; }
 @media (min-width: 1100px) { .dom .map { grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); } }
+
+/* Opravljeno delo in pregled */
+.pregled-h { display: flex; align-items: center; margin-top: 18px; }
+.pregled-h .st { margin-left: 8px; background: color-mix(in srgb, #f79009 18%, var(--panel)); color: #b54708; border-radius: 9px; padding: 1px 7px; font-size: 12px; letter-spacing: 0; }
+.mn-b { flex: 1; min-width: 0; }
+.mn-b .mn-t { display: block; width: 100%; }
+.mn-b small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+.mn-mm { color: var(--muted); font-size: 12px; text-decoration: underline; text-underline-offset: 2px; }
+.mn-mm:hover { color: var(--accent); }
+.pregledano { flex: none; align-self: center; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 9px; color: #067647; background: color-mix(in srgb, #17b26a 14%, var(--panel)); border: 1px solid color-mix(in srgb, #17b26a 35%, transparent); }
+.pregledano:disabled { opacity: .5; }
+.porocilo { margin-top: 4px; font-size: 13px; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; border-left: 2px solid var(--line); padding-left: 8px; }
+.item.naloga.done .porocilo { text-decoration: none; }
+.item.naloga small .ok { color: #067647; font-weight: 600; }
+.item.naloga small .caka { color: #b54708; font-weight: 600; }
+.btn.full { display: block; width: 100%; margin-top: 8px; }
