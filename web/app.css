@@ -273,3 +273,24 @@ input[type="date"], input[type="time"] { min-height: 48px; }
   .sub { margin: 10px 0 0; padding: 0; flex-wrap: wrap; }
 }
 .box { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+
+/* Moje naloge: kompaktno, ena vrstica na nalogo, klik razširi; glavo lahko zložiš */
+.moje-glava { width: 100%; align-items: center; }
+.moje-glava h2 { display: flex; align-items: center; }
+.moje-glava .st { margin-left: 8px; background: var(--panel2); color: var(--muted); border-radius: 9px; padding: 1px 7px; font-size: 12px; letter-spacing: 0; }
+.moje-glava .chev2 { color: var(--muted); display: inline-flex; transition: transform .15s; transform: rotate(90deg); }
+.moje-glava[aria-expanded="false"] .chev2 { transform: rotate(0deg); }
+.list.moje { padding: 4px 0; }
+.mn { display: flex; align-items: flex-start; gap: 10px; padding: 7px 12px 7px 10px; border-left: 3px solid var(--c, #98a2b3); }
+.mn + .mn { border-top: 1px solid var(--line); }
+.mn .kljuk { width: 20px; height: 20px; border-radius: 10px; border-width: 2px; border-color: var(--c, #c4cad6); margin-top: 1px; }
+.mn .kljuk[aria-pressed="true"] { background: var(--c); }
+.mn .kljuk[aria-pressed="true"]::after { left: 5px; top: 1px; width: 5px; height: 9px; border-color: color-mix(in srgb, var(--c) 25%, #101828); }
+.mn-t { flex: 1; min-width: 0; text-align: left; font-size: 14px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mn.odprta .mn-t { white-space: pre-wrap; overflow-wrap: anywhere; }
+.mn-m { flex: none; max-width: 38%; font-size: 12px; color: var(--muted); background: var(--panel2); border-radius: 8px; padding: 2px 8px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mn-m:hover { color: var(--accent); }
+.mn-vec { display: block; width: 100%; padding: 8px; font-size: 13px; font-weight: 600; color: var(--accent); border-top: 1px solid var(--line); }
+/* računalnik: skupine se ne smejo raztegniti čez rob */
+.dom > * { min-width: 0; }
+@media (min-width: 1100px) { .dom .map { grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); } }

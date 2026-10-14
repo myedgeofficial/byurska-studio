@@ -374,18 +374,32 @@ function renderDomov() {
 }
 
 // Moje naloge: odprte naloge iz vseh map, ki so zame ali za vse (brez zaklenjenih map).
+// Prikaz Mojih nalog na tej napravi: skrite (zložene), razširjene naloge in ali so prikazane vse.
+const mojePrikaz = { skrito: (() => { try { return localStorage.getItem("mojeSkrito") === "1"; } catch { return false; } })(), odprte: new Set(), vse: false };
 function mojeNaloge() {
   const moje = S.vseNaloge.filter((n) => nalogaZa(n, jaz) && mapa(n.mapa) && !zaklenjena(mapa(n.mapa)));
-  const prikaz = moje.slice(0, 8);
-  return `<div class="h2row"><h2><span class="pika-oseba" style="--c:${barvaClana(jaz)}"></span>Moje naloge</h2>${moje.length ? `<span class="small muted">${moje.length}</span>` : ""}</div>
-  <div class="list moje">${prikaz.length ? prikaz.map((n) => `<div class="item naloga" style="--c:${barvaClana(n.za)}">
+  const prikaz = mojePrikaz.vse ? moje : moje.slice(0, 5);
+  const prvaVrstica = (t) => String(t).split("\n").map((x) => x.trim()).find(Boolean) || "";
+  return `<button class="h2row moje-glava" id="mojeG" aria-expanded="${!mojePrikaz.skrito}"><h2><span class="pika-oseba" style="--c:${barvaClana(jaz)}"></span>Moje naloge${moje.length ? ` <span class="st">${moje.length}</span>` : ""}</h2><span class="chev2">${ico.chev}</span></button>
+  ${mojePrikaz.skrito ? "" : `<div class="list moje">${prikaz.length ? prikaz.map((n) => {
+    const odprta = mojePrikaz.odprte.has(n.id), vec = String(n.besedilo).trim().includes("\n") || String(n.besedilo).length > 70;
+    return `<div class="mn${odprta ? " odprta" : ""}" style="--c:${barvaClana(n.za)}">
     <button class="kljuk" data-mk="${esc(n.mapa)}/${esc(n.id)}" aria-label="Narejeno" aria-pressed="false"></button>
-    <button class="grow" data-mm="${esc(n.mapa)}"><div class="ob">${esc(n.besedilo)}</div><small>${n.za ? "" : `${oznakaZa(n)} `}${esc(kratkoIme(imeMape(n.mapa)).ime)}</small></button>
-    ${n.strosek ? `<span class="eur">${evri(n.strosek)}</span>` : ""}</div>`).join("")
-    : `<div class="empty">Nimaš odprtih nalog.</div>`}
-    ${moje.length > prikaz.length ? `<div class="empty small">in še ${moje.length - prikaz.length} v mapah</div>` : ""}</div>`;
+    <button class="mn-t" data-mo="${esc(n.id)}" title="${vec ? (odprta ? "Skrij" : "Pokaži vse") : ""}">${esc(odprta ? n.besedilo : prvaVrstica(n.besedilo))}${vec && !odprta ? " …" : ""}</button>
+    <button class="mn-m" data-mm="${esc(n.mapa)}" title="Odpri mapo">${esc(kratkoIme(imeMape(n.mapa)).ime)}</button></div>`;
+  }).join("") : `<div class="empty">Nimaš odprtih nalog.</div>`}
+    ${moje.length > 5 ? `<button class="mn-vec" id="mojeVec">${mojePrikaz.vse ? "Pokaži manj" : `Pokaži vse (${moje.length})`}</button>` : ""}</div>`}`;
 }
 function vezMojeNaloge() {
+  $("mojeG").onclick = () => {
+    mojePrikaz.skrito = !mojePrikaz.skrito;
+    try { localStorage.setItem("mojeSkrito", mojePrikaz.skrito ? "1" : "0"); } catch {}
+    osvezi();
+  };
+  if ($("mojeVec")) $("mojeVec").onclick = () => { mojePrikaz.vse = !mojePrikaz.vse; osvezi(); };
+  view.querySelectorAll("[data-mo]").forEach((b) => (b.onclick = () => {
+    const id = b.dataset.mo; mojePrikaz.odprte.has(id) ? mojePrikaz.odprte.delete(id) : mojePrikaz.odprte.add(id); osvezi();
+  }));
   view.querySelectorAll("[data-mk]").forEach((b) => (b.onclick = () => {
     const [mid, nid] = b.dataset.mk.split("/");
     b.setAttribute("aria-pressed", "true");
