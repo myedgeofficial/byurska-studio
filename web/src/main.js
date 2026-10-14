@@ -330,23 +330,15 @@ function renderDomov() {
   };
   const koren = (g) => `<button class="box${ut(g.id)}" data-m="${esc(g.id)}"><b>${esc(g.ime)}${g.zaklep ? ` <span class="kl">${ico.kljucavnica}</span>` : ""}</b>
     <small>${g.otroci.length ? stevilo(g.otroci.length, g.otroci.every((c) => kratkoIme(c.ime).pod) ? ["stran", "strani", "strani", "strani"] : ["mapa", "mapi", "mape", "map"]) : "prazno"}</small></button>`;
-  const teden = prih.filter((o) => o.kdaj < Date.now() + 7 * 864e5).length;
-  const vseNal = Object.values(S.naloge).reduce((a, n) => ({ st: a.st + n.st, eur: a.eur + n.eur }), { st: 0, eur: 0 });
   const datum = new Date().toLocaleDateString("sl-SI", { weekday: "long", day: "numeric", month: "long" });
   view.className = "domov";
   view.innerHTML = `
   <div class="top"><div class="grow"><div class="datum">${esc(datum)}</div><h1>Byurska Studio</h1></div><button class="iconbtn" id="nast" aria-label="Nastavitve">${ico.nast}</button></div>
   <div class="dom">
   <div class="dom-side">
-  <div class="stat">
-    <button id="st1"><small>Objave ta teden</small><b>${teden}</b></button>
-    <div><small>Odprte naloge</small><b>${vseNal.st}</b></div>
-    <div><small>Odprti stroški</small><b>${evri(vseNal.eur).replace(",00 €", " €")}</b></div>
-  </div>
-  ${prih[0] ? `<div class="next hero"><div class="nextlbl">Naslednja objava</div>${vrsticaObjave(prih[0])}</div>` : ""}
   <div class="d-moje">${mojeNaloge()}${zaPregled()}</div>
-  <div class="d-obj"><div class="h2row"><h2>Prihajajoče objave</h2><button id="vse">Vse</button></div>
-  <div class="next">${prih.length ? prih.slice(0, 5).map(vrsticaObjave).join("") : `<div class="empty">Ni načrtovanih objav.</div>`}</div></div>
+  <div class="d-obj"><div class="h2row"><h2>Objave</h2><button id="vse">Vse</button></div>
+  <div class="next">${prih.length ? prih.slice(0, 3).map(vrsticaObjave).join("") : `<div class="empty">Ni načrtovanih objav.</div>`}</div></div>
   </div>
   <div class="map dots">
     ${S.nalozeno ? drevo(S.mape).map((g) => `
@@ -363,7 +355,7 @@ function renderDomov() {
   $("addmap").onclick = () => urediMapo();
   view.querySelectorAll("[data-dodaj]").forEach((b) => (b.onclick = () => urediMapo(null, b.dataset.dodaj)));
   $("nova").onclick = () => urediObjavo();
-  $("vse").onclick = $("st1").onclick = () => pojdi("objave");
+  $("vse").onclick = () => pojdi("objave");
   view.querySelectorAll(".box[data-m]").forEach((b) => {
     b.onclick = () => { if (b.dataset.dolg) return delete b.dataset.dolg; pojdi("mapa", { mapa: b.dataset.m }); };
     // Desni klik na računalniku ali dolg pritisk na telefonu odpre meni mape (zaklep, ime, podmapa, brisanje).
@@ -607,25 +599,35 @@ function prijaviMapo(id) {
 }
 function odjaviMapo() { mapaUnsub.splice(0).forEach((f) => f()); }
 
+const SKUPINE = [
+  { k: "naloge", ime: "TO DO", deli: [["todo", "TO DO"]] },
+  { k: "vsebina", ime: "Vsebina", deli: [["urejeno", "Urejeno"], ["surovo", "Surovo"]] },
+  { k: "zapiski", ime: "Zapiski", deli: [["ideje", "Ideje"], ["opombe", "Opombe"], ["skripte", "Skripte"], ["gesla", "Gesla"]] },
+  { k: "objave", ime: "Objave", deli: [["objave", "Objave"]] },
+];
+const zadnjiDel = {};
 function renderMapa() {
   const m = mapa(pot.mapa);
   if (!m) { view.innerHTML = `<div class="center"><div class="spin"></div></div>`; return; }
   if (zaklenjena(m)) return renderZaklenjenaMapa(m);
   const otroci = S.mape.filter((x) => x.oce === m.id).sort((a, b) => (a.red ?? 0) - (b.red ?? 0));
   const z = pot.zavihek;
-  const tabs = [["todo", "TO DO"], ["ideje", "Ideje"], ["urejeno", "Urejeno"], ["surovo", "Surovo"], ["gesla", "Gesla"], ["opombe", "Opombe"], ["skripte", "Skripte"], ["objave", "Objave"]];
+  // Samo štirje glavni zavihki; sorodne stvari so združene pod enim (manjši preklop znotraj).
+  const glavni = SKUPINE.find((g) => g.deli.some(([k]) => k === z)) || SKUPINE[0];
+  zadnjiDel[glavni.k] = z;
   view.innerHTML = `
   <div class="top"><button class="iconbtn" id="nazaj" aria-label="Nazaj">${ico.nazaj}</button>
     <div class="grow"><h1>${esc(m.ime)}</h1></div>
     <button class="iconbtn" id="vec" aria-label="Več">${ico.vec}</button></div>
   ${m.url ? `<a class="small" href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.url.replace(/^https?:\/\//, ""))}</a>` : ""}
   ${otroci.length ? `<div class="sub">${otroci.map((c) => `<button class="box" data-m="${esc(c.id)}">${esc(c.ime)}</button>`).join("")}</div>` : ""}
-  <div class="mapa-tel"><div class="tabs">${tabs.map(([k, n]) => `<button data-t="${k}" aria-pressed="${z === k}">${n}</button>`).join("")}</div>
-  <div id="vsebina"></div></div>`;
+  <div class="mapa-tel"><div class="tabs">${SKUPINE.map((g) => `<button data-t="${zadnjiDel[g.k] || g.deli[0][0]}" aria-pressed="${g === glavni}">${g.ime}</button>`).join("")}</div>
+  <div class="desno">${glavni.deli.length > 1 ? `<div class="seg">${glavni.deli.map(([k, n]) => `<button data-t="${k}" aria-pressed="${z === k}">${n}</button>`).join("")}</div>` : ""}
+  <div id="vsebina"></div></div></div>`;
   $("nazaj").onclick = nazaj;
   $("vec").onclick = () => menuMape(m);
   view.querySelectorAll(".sub .box").forEach((b) => (b.onclick = () => pojdi("mapa", { mapa: b.dataset.m })));
-  view.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => { pot.zavihek = b.dataset.t; osvezi(); }));
+  view.querySelectorAll(".tabs button, .seg button").forEach((b) => (b.onclick = () => { pot.zavihek = b.dataset.t; osvezi(); }));
   const t = view.querySelector('.tabs [aria-pressed="true"]'), tb = t?.parentElement;
   if (t && tb.scrollWidth > tb.clientWidth) tb.scrollLeft = t.offsetLeft - (tb.clientWidth - t.offsetWidth) / 2;
   const el = $("vsebina");
@@ -927,7 +929,7 @@ function renderNaloge(el, m) {
   el.innerHTML = `<div class="dvo"><div class="dvo-l"><div class="opn">${izbiraZa("tza", osnutek.za)}<textarea id="tn" maxlength="2000" placeholder="Kaj je treba narediti?"></textarea>
     <div class="row"><input id="tz" inputmode="decimal" placeholder="Strošek €"><button class="btn" id="tdd">Dodaj</button></div>
     <button class="btn ghost full" id="tdn" title="Vpiši delo, ki si ga že opravil, da ga drugi pregledajo">Vpiši kot opravljeno</button></div>
-    <div class="stroski"><div><small>Stroški skupaj</small><b>${evri(vsota(M.naloge))}</b></div><div><small>Še odprto</small><b>${evri(vsota(odprte))}</b></div></div></div>
+    ${vsota(M.naloge) ? `<div class="stroski"><div><small>Stroški skupaj</small><b>${evri(vsota(M.naloge))}</b></div><div><small>Še odprto</small><b>${evri(vsota(odprte))}</b></div></div>` : ""}</div>
     <div class="dvo-r"><div class="list" style="margin-top:12px">${odprte.length ? odprte.map(vrstica).join("") : `<div class="empty">Ni odprtih nalog.</div>`}</div>
     ${narejene.length ? `<h2>Opravljeno</h2><div class="list">${narejene.map(vrstica).join("")}</div>` : ""}</div></div>`;
   // Kar je vpisano, ostane tudi, ko se seznam osveži.
