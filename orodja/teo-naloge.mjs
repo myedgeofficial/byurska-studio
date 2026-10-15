@@ -4,11 +4,17 @@
 //   node orodja/teo-naloge.mjs seznam                       odprte naloge za Teota in za Vse (JSON)
 //   node orodja/teo-naloge.mjs opravljeno <mapa> <id> "kaj je narejeno"
 //   node orodja/teo-naloge.mjs preskoci <mapa> <id>         naloga ni za avtomatsko delo, ne ponujaj je več
-import { readFileSync } from "node:fs";
+//   node orodja/teo-naloge.mjs nalozi <mapa> <urejeno|surovo> <datoteka>   naloži datoteko v mapo (zavihek Vsebina)
+import { readFileSync, existsSync, statSync, mkdtempSync } from "node:fs";
+import { basename, join } from "node:path";
+import { tmpdir } from "node:os";
+import { execFileSync } from "node:child_process";
 
 const PROJEKT = process.env.BYURSKA_PROJEKT || "byurska-studio";
 const EMU = process.env.BYURSKA_EMULATOR === "1";
-const KLJUC = process.env.BYURSKA_API_KEY || (EMU ? "x" : JSON.parse(readFileSync(new URL("./firebase-kljuc.json", import.meta.url), "utf8")).apiKey);
+const NAST = EMU ? { apiKey: "x", storageBucket: `${PROJEKT}.appspot.com` } : JSON.parse(readFileSync(new URL("./firebase-kljuc.json", import.meta.url), "utf8"));
+const KLJUC = process.env.BYURSKA_API_KEY || NAST.apiKey;
+const SHRAMBA = (EMU ? "http://127.0.0.1:9199" : "https://firebasestorage.googleapis.com") + `/v0/b/${process.env.BYURSKA_BUCKET || NAST.storageBucket}/o`;
 const AUTH = EMU ? "http://127.0.0.1:9099/identitytoolkit.googleapis.com" : "https://identitytoolkit.googleapis.com";
 const FS = (EMU ? "http://127.0.0.1:8080" : "https://firestore.googleapis.com") + `/v1/projects/${PROJEKT}/databases/(default)/documents`;
 
@@ -74,4 +80,33 @@ if (ukaz === "seznam") {
   const maska = Object.keys(f).map((k) => `updateMask.fieldPaths=${k}`).join("&");
   await api(`/mape/${encodeURIComponent(mapa)}/naloge/${encodeURIComponent(id)}?${maska}&currentDocument.exists=true`, { method: "PATCH", body: JSON.stringify({ fields: f }) });
   console.log(ukaz === "preskoci" ? "Preskočeno." : "Označeno kot opravljeno.");
-} else napaka("Ukazi: seznam | opravljeno <mapa> <id> [opis] | preskoci <mapa> <id>");
+} else if (ukaz === "nalozi") {
+  const vrsta = id, pot = ostalo[0];
+  if (!mapa || !["urejeno", "surovo"].includes(vrsta) || !pot || !existsSync(pot)) napaka("Uporaba: nalozi <mapa> <urejeno|surovo> <datoteka>");
+  const ime = basename(pot);
+  const TIPI = { mp4: "video/mp4", mov: "video/quicktime", webm: "video/webm", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", pdf: "application/pdf", txt: "text/plain", md: "text/markdown" };
+  const tip = TIPI[ime.split(".").pop().toLowerCase()] || "application/octet-stream";
+  const pot0 = `mape/${mapa}/${vrsta}/${Date.now()}-${ime.replace(/[^\w.\-]+/g, "_").slice(-80)}`;
+  const gor = async (cilj, telo, ct) => {
+    const r = await fetch(`${SHRAMBA}?uploadType=media&name=${encodeURIComponent(cilj)}`, { method: "POST", headers: { authorization: `Firebase ${zeton}`, "content-type": ct }, body: telo });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) napaka(`Nalaganje ni uspelo ${r.status}: ${j.error?.message || ""}`);
+    return `${SHRAMBA}/${encodeURIComponent(cilj)}?alt=media&token=${String(j.downloadTokens || "").split(",")[0]}`;
+  };
+  // Sličica kot v aplikaciji: pri videu ena sličica (ffmpeg, če je na voljo).
+  let slUrl = null;
+  if (tip.startsWith("video/")) {
+    try {
+      const sl = join(mkdtempSync(join(tmpdir(), "sl-")), "sl.jpg");
+      execFileSync("ffmpeg", ["-v", "error", "-y", "-ss", "1", "-i", pot, "-frames:v", "1", "-vf", "scale=480:-2", sl]);
+      slUrl = await gor(`${pot0}.jpg-sl`, readFileSync(sl), "image/jpeg");
+    } catch {}
+  }
+  const url = await gor(pot0, readFileSync(pot), tip);
+  await api(`/mape/${encodeURIComponent(mapa)}/datoteke`, { method: "POST", body: JSON.stringify({ fields: {
+    vrsta: { stringValue: vrsta }, ime: { stringValue: ime }, tip: { stringValue: tip }, velikost: { integerValue: String(statSync(pot).size) },
+    pot: { stringValue: pot0 }, url: { stringValue: url }, slicica: slUrl ? { stringValue: slUrl } : { nullValue: null },
+    slPot: slUrl ? { stringValue: `${pot0}.jpg-sl` } : { nullValue: null }, dodal: { stringValue: jaz }, ob: { integerValue: String(Date.now()) },
+  } }) });
+  console.log(`Naloženo v ${vrsta}: ${ime}`);
+} else napaka("Ukazi: seznam | opravljeno <mapa> <id> [opis] | preskoci <mapa> <id> | nalozi <mapa> <urejeno|surovo> <datoteka>");

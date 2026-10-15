@@ -7,6 +7,10 @@ Ura za uro se zažene seja, ki dela namesto Teota. V aplikaciji je vse videti, k
 2. Vzemi nalogo, ki je dodeljena Teotu. Nalogo pod "vsi" vzemi samo, če iz besedila jasno izhaja, da je mišljena za Teota
    (omenja Teota, aplikacije, kodo, splet, Nakupko, Fixko, Byurska Studio, tehnične stvari ...). Kar je očitno za Urško ali Nives, pusti pri miru.
 3. Nalogo naredi do konca. Potem `node orodja/teo-naloge.mjs opravljeno <mapa> <id> "kratek opis, kaj je narejeno in kje je rezultat"`.
+   Datoteke (videi, slike, PDF), ki jih naloga zahteva v aplikaciji, naloži z
+   `node orodja/teo-naloge.mjs nalozi <mapa> urejeno|surovo <datoteka>` (urejeno = končna vsebina, surovo = surovi material).
+   Videe lahko narediš z ffmpeg (namesti z apt, če ga ni): npr. 9:16, 1080x1920, besedilo, slike, glasba brez avtorskih pravic ni nujna.
+   Vsebino o projektih najdeš v javnih repozitorijih (remako.si: github.com/repusicurska-dot/remako-si, Popravko: github.com/myedgeofficial/fixko).
 4. Nalogo, ki je ni mogoče narediti samodejno, označi z `node orodja/teo-naloge.mjs preskoci <mapa> <id>`, da se ne ponavlja. Ostane odprta za Teota.
 
 ## Kaj se ne dela samodejno (preskoči)
