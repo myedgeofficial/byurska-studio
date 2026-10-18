@@ -318,3 +318,11 @@ input[type="date"], input[type="time"] { min-height: 48px; }
 .seg button { padding: 8px 0 9px; font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
 .seg button[aria-pressed="true"] { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
 @media (min-width: 1100px) { .seg { margin-top: 0; } }
+
+/* Caption na sličici */
+.tile .cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 6px 4px; font-size: 11px; line-height: 1.25; color: #fff; text-align: left; background: linear-gradient(transparent, rgba(0,0,0,.7)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Gesla kot predloga: aplikacija | uporabnik | geslo */
+.item.geslo { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) auto auto; gap: 10px; align-items: center; text-align: left; }
+.item.geslo .g-app { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item.geslo .g-up { color: var(--muted); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item.geslo .g-pw { color: var(--muted); letter-spacing: 1px; }

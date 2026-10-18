@@ -4,7 +4,7 @@
 //   node orodja/teo-naloge.mjs seznam                       odprte naloge za Teota in za Vse (JSON)
 //   node orodja/teo-naloge.mjs opravljeno <mapa> <id> "kaj je narejeno"
 //   node orodja/teo-naloge.mjs preskoci <mapa> <id>         naloga ni za avtomatsko delo, ne ponujaj je več
-//   node orodja/teo-naloge.mjs nalozi <mapa> <urejeno|surovo> <datoteka>   naloži datoteko v mapo (zavihek Vsebina)
+//   node orodja/teo-naloge.mjs nalozi <mapa> <urejeno|surovo> <datoteka> ["caption"]   naloži datoteko (s captionom) v mapo
 import { readFileSync, existsSync, statSync, mkdtempSync } from "node:fs";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -81,7 +81,7 @@ if (ukaz === "seznam") {
   await api(`/mape/${encodeURIComponent(mapa)}/naloge/${encodeURIComponent(id)}?${maska}&currentDocument.exists=true`, { method: "PATCH", body: JSON.stringify({ fields: f }) });
   console.log(ukaz === "preskoci" ? "Preskočeno." : "Označeno kot opravljeno.");
 } else if (ukaz === "nalozi") {
-  const vrsta = id, pot = ostalo[0];
+  const vrsta = id, pot = ostalo[0], opis = ostalo.slice(1).join(" ").trim();
   if (!mapa || !["urejeno", "surovo"].includes(vrsta) || !pot || !existsSync(pot)) napaka("Uporaba: nalozi <mapa> <urejeno|surovo> <datoteka>");
   const ime = basename(pot);
   const TIPI = { mp4: "video/mp4", mov: "video/quicktime", webm: "video/webm", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", pdf: "application/pdf", txt: "text/plain", md: "text/markdown" };
@@ -106,7 +106,7 @@ if (ukaz === "seznam") {
   await api(`/mape/${encodeURIComponent(mapa)}/datoteke`, { method: "POST", body: JSON.stringify({ fields: {
     vrsta: { stringValue: vrsta }, ime: { stringValue: ime }, tip: { stringValue: tip }, velikost: { integerValue: String(statSync(pot).size) },
     pot: { stringValue: pot0 }, url: { stringValue: url }, slicica: slUrl ? { stringValue: slUrl } : { nullValue: null },
-    slPot: slUrl ? { stringValue: `${pot0}.jpg-sl` } : { nullValue: null }, dodal: { stringValue: jaz }, ob: { integerValue: String(Date.now()) },
+    slPot: slUrl ? { stringValue: `${pot0}.jpg-sl` } : { nullValue: null }, opis: { stringValue: opis }, dodal: { stringValue: jaz }, ob: { integerValue: String(Date.now()) },
   } }) });
   console.log(`Naloženo v ${vrsta}: ${ime}`);
 } else napaka("Ukazi: seznam | opravljeno <mapa> <id> [opis] | preskoci <mapa> <id> | nalozi <mapa> <urejeno|surovo> <datoteka>");

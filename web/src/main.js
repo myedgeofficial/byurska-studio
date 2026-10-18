@@ -275,7 +275,7 @@ function planirajObvestila() {
 function pojdi(zaslon, opts = {}) {
   zgod.push({ ...pot });
   if (pot.mapa !== opts.mapa || zaslon !== "mapa") odjaviMapo();
-  Object.assign(pot, { zaslon, mapa: null, zavihek: "todo" }, opts);
+  Object.assign(pot, { zaslon, mapa: null, zavihek: "" }, opts);
   if (zaslon === "mapa") prijaviMapo(pot.mapa);
   window.scrollTo(0, 0);
   osvezi();
@@ -605,15 +605,24 @@ const SKUPINE = [
   { k: "zapiski", ime: "Zapiski", deli: [["ideje", "Ideje"], ["opombe", "Opombe"], ["skripte", "Skripte"], ["gesla", "Gesla"]] },
   { k: "objave", ime: "Objave", deli: [["objave", "Objave"]] },
 ];
+// Mapa za gesla: namesto vsebine (urejeno/surovo) samo gesla, opombe in naloge.
+const SKUPINE_GESLA = [
+  { k: "gesla", ime: "Gesla", deli: [["gesla", "Gesla"]] },
+  { k: "opombe", ime: "Opombe", deli: [["opombe", "Opombe"]] },
+  { k: "naloge", ime: "TO DO", deli: [["todo", "TO DO"]] },
+];
+const jeMapaGesel = (m) => m.vrstaMape ? m.vrstaMape === "gesla" : /gesl|passw|dostop/i.test(m.ime || "");
 const zadnjiDel = {};
 function renderMapa() {
   const m = mapa(pot.mapa);
   if (!m) { view.innerHTML = `<div class="center"><div class="spin"></div></div>`; return; }
   if (zaklenjena(m)) return renderZaklenjenaMapa(m);
   const otroci = S.mape.filter((x) => x.oce === m.id).sort((a, b) => (a.red ?? 0) - (b.red ?? 0));
+  const SK = jeMapaGesel(m) ? SKUPINE_GESLA : SKUPINE;
+  if (!SK.some((g) => g.deli.some(([k]) => k === pot.zavihek))) pot.zavihek = SK[0].deli[0][0];
   const z = pot.zavihek;
-  // Samo štirje glavni zavihki; sorodne stvari so združene pod enim (manjši preklop znotraj).
-  const glavni = SKUPINE.find((g) => g.deli.some(([k]) => k === z)) || SKUPINE[0];
+  // Samo nekaj glavnih zavihkov; sorodne stvari so združene pod enim (manjši preklop znotraj).
+  const glavni = SK.find((g) => g.deli.some(([k]) => k === z)) || SK[0];
   zadnjiDel[glavni.k] = z;
   view.innerHTML = `
   <div class="top"><button class="iconbtn" id="nazaj" aria-label="Nazaj">${ico.nazaj}</button>
@@ -621,7 +630,7 @@ function renderMapa() {
     <button class="iconbtn" id="vec" aria-label="Več">${ico.vec}</button></div>
   ${m.url ? `<a class="small" href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.url.replace(/^https?:\/\//, ""))}</a>` : ""}
   ${otroci.length ? `<div class="sub">${otroci.map((c) => `<button class="box" data-m="${esc(c.id)}">${esc(c.ime)}</button>`).join("")}</div>` : ""}
-  <div class="mapa-tel"><div class="tabs">${SKUPINE.map((g) => `<button data-t="${zadnjiDel[g.k] || g.deli[0][0]}" aria-pressed="${g === glavni}">${g.ime}</button>`).join("")}</div>
+  <div class="mapa-tel"><div class="tabs">${SK.map((g) => `<button data-t="${zadnjiDel[g.k] || g.deli[0][0]}" aria-pressed="${g === glavni}">${g.ime}</button>`).join("")}</div>
   <div class="desno">${glavni.deli.length > 1 ? `<div class="seg">${glavni.deli.map(([k, n]) => `<button data-t="${k}" aria-pressed="${z === k}">${n}</button>`).join("")}</div>` : ""}
   <div id="vsebina"></div></div></div>`;
   $("nazaj").onclick = nazaj;
@@ -701,6 +710,7 @@ function menuMape(m, izDomov = false) {
     ${m.zaklep ? `<button class="btn ghost" id="mzz">Zakleni zdaj</button><button class="btn ghost" id="mzg">Spremeni geslo mape</button><button class="btn ghost" id="mzo">Odstrani geslo</button>`
       : `<button class="btn ghost" id="mzg">Zakleni z geslom</button>`}
     <button class="btn ghost" id="mu">Uredi ime in povezavo</button>
+    <button class="btn ghost" id="mvg">${jeMapaGesel(m) ? "Naredi navadno mapo (vsebina)" : "Naredi mapo za gesla"}</button>
     <button class="btn ghost" id="mp">Dodaj podmapo</button>
     <button class="btn danger" id="mb">Izbriši mapo</button>`, () => {
     if ($("mo")) $("mo").onclick = () => { closeSheet(); pojdi("mapa", { mapa: m.id }); };
@@ -711,6 +721,7 @@ function menuMape(m, izDomov = false) {
       updateDoc(doc(db, "mape", m.id), { zaklep: deleteField() }).then(() => toast("Geslo odstranjeno")).catch(napaka); closeSheet();
     };
     $("mu").onclick = () => urediMapo(m);
+    $("mvg").onclick = () => { if (pot.mapa === m.id) pot.zavihek = ""; updateDoc(doc(db, "mape", m.id), { vrstaMape: jeMapaGesel(m) ? "vsebina" : "gesla" }).catch(napaka); closeSheet(); };
     $("mp").onclick = () => urediMapo(null, m.id);
     $("mb").onclick = async () => {
       const [d, g, n, t, i, sk] = await Promise.all(["datoteke", "gesla", "opombe", "naloge", "ideje", "skripte"].map((c) => getDocs(query(collection(db, "mape", m.id, c), limit(1)))));
@@ -769,31 +780,36 @@ function renderDatoteke(el, m, vrsta) {
     ${nal.map((n) => `<div class="prog" data-nal="${n.kljuc}">Nalagam ${esc(n.ime)} · <span>${n.odst}</span>%<div class="bar"><i style="width:${n.odst}%"></i></div></div>`).join("")}
     <div class="grid">
       <button class="tile add" id="dodaj">${ico.plus}<span>Dodaj</span></button>
-      ${seznam.map((d) => `<button class="tile" data-d="${esc(d.id)}">${predogled(d, true)}</button>`).join("")}
+      ${seznam.map((d) => `<button class="tile" data-d="${esc(d.id)}">${predogled(d, true)}${d.opis ? `<div class="cap">${esc(d.opis.split("\n")[0])}</div>` : ""}</button>`).join("")}
     </div>
     ${!seznam.length && M.nalozeno ? `<div class="empty">${vrsta === "urejeno" ? "Tu je vsebina, pripravljena za objavo." : "Tu so surovi posnetki in slike za urejanje."}</div>` : ""}
     <input type="file" id="file" multiple hidden>`;
+  // Caption se shrani skupaj s sliko ali videom, da se ne izgubita med sabo.
+  let caption = "";
   $("dodaj").onclick = () => openSheet(`<h3>Dodaj v ${vrsta === "urejeno" ? "Urejeno" : "Surovo"}</h3>
-      <button class="btn" id="dg">Slike, videi ali datoteke</button>
+      <label for="dcap">Caption <span class="muted">(ni obvezno)</span></label>
+      <textarea id="dcap" maxlength="5000" placeholder="Besedilo objave, #hashtagi ..."></textarea>
+      <button class="btn" id="dg">Izberi sliko ali video</button>
       <button class="btn ghost" id="dp">Povezava (Google Drive, Dropbox ...)</button>`, () => {
-    $("dg").onclick = () => { closeSheet(); $("file").click(); };
-    $("dp").onclick = () => dodajPovezavo(m, vrsta);
+    $("dg").onclick = () => { caption = $("dcap").value.trim(); closeSheet(); $("file").click(); };
+    $("dp").onclick = () => dodajPovezavo(m, vrsta, $("dcap").value.trim());
   });
-  $("file").onchange = (e) => { [...e.target.files].forEach((f) => nalozi(m.id, vrsta, f)); e.target.value = ""; };
+  $("file").onchange = (e) => { [...e.target.files].forEach((f) => nalozi(m.id, vrsta, f, caption)); e.target.value = ""; caption = ""; };
   el.querySelectorAll(".tile[data-d]").forEach((b) => (b.onclick = () => pokaziDatoteko(b.dataset.d)));
 }
 
-function dodajPovezavo(m, vrsta) {
+function dodajPovezavo(m, vrsta, opis = "") {
   openSheet(`<h3>Povezava</h3>
     <label for="pi">Ime</label><input id="pi" maxlength="80" placeholder="npr. Posnetki iz plezalne">
     <label for="pu">Povezava</label><input id="pu" type="url" inputmode="url" autocapitalize="off" placeholder="https://">
+    <label for="pc">Caption <span class="muted">(ni obvezno)</span></label><textarea id="pc" maxlength="5000">${esc(opis)}</textarea>
     <button class="btn" id="ps">Dodaj</button>`, () => {
     $("ps").onclick = async () => {
       let url = $("pu").value.trim();
       if (!url) return toast("Prilepi povezavo.");
       if (!/^https?:\/\//i.test(url)) url = "https://" + url;
       await addDoc(collection(db, "mape", m.id, "datoteke"), {
-        vrsta, ime: $("pi").value.trim() || url.replace(/^https?:\/\//, "").slice(0, 60), povezava: true, url, dodal: jaz, ob: Date.now()
+        vrsta, ime: $("pi").value.trim() || url.replace(/^https?:\/\//, "").slice(0, 60), povezava: true, url, opis: $("pc").value.trim(), dodal: jaz, ob: Date.now()
       }).then(() => { closeSheet(); toast("Dodano"); }).catch(napaka);
     };
   });
@@ -829,7 +845,7 @@ function slicica(file) {
   });
 }
 
-async function nalozi(mapaId, vrsta, file) {
+async function nalozi(mapaId, vrsta, file, opis = "") {
   const ime = file.name || `vsebina-${Date.now()}`;
   const varno = ime.replace(/[^\w.\-]+/g, "_").slice(-80);
   const pot0 = `mape/${mapaId}/${vrsta}/${Date.now()}-${varno}`;
@@ -855,7 +871,7 @@ async function nalozi(mapaId, vrsta, file) {
     }, rej, res));
     const url = await getDownloadURL(r);
     await addDoc(collection(db, "mape", mapaId, "datoteke"), {
-      vrsta, ime, tip: file.type || "", velikost: file.size, pot: pot0, url, slicica: slUrl, slPot: slUrl ? `${pot0}.jpg-sl` : null, dodal: jaz, ob: Date.now()
+      vrsta, ime, tip: file.type || "", velikost: file.size, pot: pot0, url, slicica: slUrl, slPot: slUrl ? `${pot0}.jpg-sl` : null, opis, dodal: jaz, ob: Date.now()
     });
   } catch (e) { napaka(e); }
   M.nalaganja.splice(M.nalaganja.indexOf(n), 1);
@@ -877,11 +893,15 @@ function pokaziDatoteko(id) {
     <div class="preview">${predogled(d)}</div>
     <h3 class="sel" style="margin-top:12px;word-break:break-word">${esc(d.ime)}</h3>
     <p class="small muted">${esc(imeClana(d.dodal))} · ${esc(kdajBesedilo(d.ob))}${d.velikost ? ` · ${velikost(d.velikost)}` : ""}</p>
+    <label for="dcp">Caption</label><textarea id="dcp" maxlength="5000" placeholder="Besedilo objave za to sliko ali video">${esc(d.opis || "")}</textarea>
+    <div class="row"><button class="btn ghost" id="dcs">Shrani caption</button><button class="btn ghost" id="dck">Kopiraj caption</button></div>
     <button class="btn" id="dd">${d.povezava ? "Odpri povezavo" : "Shrani ali deli"}</button>
     <button class="btn ghost" id="dn">Načrtuj objavo s tem</button>
     <div class="row"><button class="btn ghost" id="dm">Premakni v ${druga === "urejeno" ? "Urejeno" : "Surovo"}</button><button class="btn danger" id="db">Izbriši</button></div>`, () => {
     $("dd").onclick = () => deli(d);
-    $("dn").onclick = () => urediObjavo({}, { mapa: pot.mapa, datoteka: { id: d.id, ime: d.ime, url: d.url, tip: d.tip || "", slicica: d.slicica || null, povezava: !!d.povezava } });
+    $("dcs").onclick = () => { updateDoc(doc(db, "mape", pot.mapa, "datoteke", d.id), { opis: $("dcp").value.trim() }).then(() => toast("Caption shranjen")).catch(napaka); };
+    $("dck").onclick = () => $("dcp").value.trim() ? kopiraj($("dcp").value.trim()) : toast("Caption je prazen.");
+    $("dn").onclick = () => urediObjavo({ opis: $("dcp").value.trim().slice(0, 500) }, { mapa: pot.mapa, datoteka: { id: d.id, ime: d.ime, url: d.url, tip: d.tip || "", slicica: d.slicica || null, povezava: !!d.povezava } });
     $("dm").onclick = () => { updateDoc(doc(db, "mape", pot.mapa, "datoteke", d.id), { vrsta: druga }).catch(napaka); closeSheet(); };
     $("db").onclick = async () => {
       if (!confirm(`Izbrišem ${d.ime}?`)) return;
@@ -1071,10 +1091,10 @@ async function renderGesla(el, m) {
     }
   }
   if (pot.zavihek !== "gesla" || pot.mapa !== m.id || !el.isConnected) return;
-  el.innerHTML = `<button class="btn" id="gn">Dodaj geslo ali informacijo</button>
+  el.innerHTML = `<button class="btn" id="gn">Dodaj geslo</button>
     <div class="list" style="margin-top:14px">${M.gesla.length ? M.gesla.map((g) => {
       const v = M.odklenjena[g.id]?.v || {};
-      return `<button class="item" data-g="${esc(g.id)}"><div class="grow"><div>${esc(g.naslov)}</div><small>${esc(v.napaka ? "Ni mogoče odkleniti" : v.uporabnik || v.opomba?.slice(0, 50) || "")}</small></div>${ico.chev}</button>`;
+      return `<button class="item geslo" data-g="${esc(g.id)}"><div class="g-app">${esc(g.naslov)}</div><div class="g-up">${esc(v.napaka ? "Ni mogoče odkleniti" : v.uporabnik || v.opomba?.slice(0, 50) || "")}</div><div class="g-pw">${v.geslo ? "••••••" : ""}</div>${ico.chev}</button>`;
     }).join("") : `<div class="empty">Npr. Instagram, TikTok, domena, gostovanje, App Store ...</div>`}</div>`;
   $("gn").onclick = () => urediGeslo(m);
   el.querySelectorAll(".item[data-g]").forEach((b) => (b.onclick = () => pokaziGeslo(m, b.dataset.g)));
@@ -1086,7 +1106,7 @@ function pokaziGeslo(m, id) {
   const polje = (k, n, skrito) => v[k] ? `<div class="field"><div class="grow"><small>${n}</small><span class="sel" ${skrito ? `data-skrito="1"` : ""}>${skrito ? "••••••••" : esc(v[k])}</span></div>
     ${skrito ? `<button data-pokazi>Pokaži</button>` : ""}<button data-kop="${k}">Kopiraj</button></div>` : "";
   openSheet(`<h3>${esc(g.naslov)}</h3>
-    ${polje("uporabnik", "Uporabnik ali e-pošta")}${polje("geslo", "Geslo", true)}${polje("povezava", "Povezava")}
+    ${polje("uporabnik", "Uporabniško ime ali e-pošta")}${polje("geslo", "Geslo", true)}${polje("povezava", "Povezava")}
     ${v.opomba ? `<div class="field"><div class="grow"><small>Opomba</small><span class="sel" style="white-space:pre-wrap">${esc(v.opomba)}</span></div></div>` : ""}
     <div class="row"><button class="btn ghost" id="gu">Uredi</button><button class="btn danger" id="gb">Izbriši</button></div>`, (box) => {
     box.querySelectorAll("[data-kop]").forEach((b) => (b.onclick = () => kopiraj(v[b.dataset.kop])));
@@ -1104,17 +1124,17 @@ function pokaziGeslo(m, id) {
 }
 
 function urediGeslo(m, g = null, v = {}) {
-  openSheet(`<h3>${g ? "Uredi" : "Novo geslo ali informacija"}</h3>
-    <label for="gn1">Naslov</label><input id="gn1" maxlength="80" value="${esc(g?.naslov || "")}" placeholder="npr. Instagram">
-    <label for="gn2">Uporabnik ali e-pošta</label><input id="gn2" autocapitalize="off" autocomplete="off" value="${esc(v.uporabnik || "")}">
+  openSheet(`<h3>${g ? "Uredi geslo" : "Novo geslo"}</h3>
+    <label for="gn1">Aplikacija ali stran</label><input id="gn1" maxlength="80" value="${esc(g?.naslov || "")}" placeholder="npr. Instagram, Gmail, AJPES">
+    <label for="gn2">Uporabniško ime ali e-pošta</label><input id="gn2" autocapitalize="off" autocomplete="off" value="${esc(v.uporabnik || "")}">
     <label for="gn3">Geslo</label><input id="gn3" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" value="${esc(v.geslo || "")}">
     <label for="gn4">Povezava</label><input id="gn4" type="url" inputmode="url" autocapitalize="off" value="${esc(v.povezava || "")}">
-    <label for="gn5">Pomembne informacije</label><textarea id="gn5" maxlength="4000" placeholder="npr. 2FA koda je na Urškinem telefonu, račun plačan do ...">${esc(v.opomba || "")}</textarea>
-    <p class="small muted">Vse razen naslova je šifrirano s skupnim geslom.</p>
+    <label for="gn5">Opomba</label><textarea id="gn5" maxlength="4000" placeholder="npr. 2FA koda je na Urškinem telefonu, račun plačan do ...">${esc(v.opomba || "")}</textarea>
+    <p class="small muted">Vse razen imena aplikacije je šifrirano s skupnim geslom.</p>
     <button class="btn" id="gs">Shrani</button>`, () => {
     $("gs").onclick = async () => {
       const naslov = $("gn1").value.trim();
-      if (!naslov) return toast("Vpiši naslov.");
+      if (!naslov) return toast("Vpiši aplikacijo ali stran.");
       const vsebina = { uporabnik: $("gn2").value.trim(), geslo: $("gn3").value, povezava: $("gn4").value.trim(), opomba: $("gn5").value.trim() };
       $("gs").disabled = true;
       try {
