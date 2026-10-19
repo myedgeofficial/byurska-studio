@@ -11,7 +11,7 @@ import {
 } from "firebase/firestore";
 import { getStorage, ref, uploadBytesResumable, uploadBytes, getDownloadURL, deleteObject, connectStorageEmulator } from "firebase/storage";
 import {
-  ZACETNI_CLANI, ZACETNE_MAPE, PLATFORME, platformeIme, drevo, dan, ura, kdajBesedilo, opomnikiZa, PRIVZETI_OPOMNIKI, opisOpomnikov,
+  ZACETNI_CLANI, ZACETNE_MAPE, PLATFORME, platformeIme, drevo, dan, ura, pozdrav, kdajBesedilo, opomnikiZa, PRIVZETI_OPOMNIKI, opisOpomnikov,
   vrstaDatoteke, velikost, veljavenEmail, nujnost, znesek, evri, kratkoIme, stevilo, ics, barvaClana, nalogaZa
 } from "./data.js";
 import { novaSol, kljucIzGesla, zakleni, odkleni, preveritev, pravilen } from "./trezor.js";
@@ -333,7 +333,7 @@ function renderDomov() {
   const datum = new Date().toLocaleDateString("sl-SI", { weekday: "long", day: "numeric", month: "long" });
   view.className = "domov";
   view.innerHTML = `
-  <div class="top"><div class="grow"><div class="datum">${esc(datum)}</div><h1>Byurska Studio</h1></div><button class="iconbtn" id="nast" aria-label="Nastavitve">${ico.nast}</button></div>
+  <div class="top"><div class="grow"><div class="datum">${esc(datum)}</div><h1>${esc(pozdrav())}, ${esc(imeClana(jaz))}!</h1></div><button class="iconbtn" id="nast" aria-label="Nastavitve">${ico.nast}</button></div>
   <div class="dom">
   <div class="dom-side">
   <div class="d-moje">${mojeNaloge()}${zaPregled()}</div>

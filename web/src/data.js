@@ -35,6 +35,11 @@ export function drevo(mape) {
 const DNEVI = ["ned", "pon", "tor", "sre", "čet", "pet", "sob"];
 const dvo = (n) => String(n).padStart(2, "0");
 export const ura = (d) => `${dvo(d.getHours())}:${dvo(d.getMinutes())}`;
+// Pozdrav glede na uro: 5–10 jutro, 10–18 dan, sicer večer.
+export const pozdrav = (d = new Date()) => {
+  const h = d.getHours();
+  return h >= 5 && h < 10 ? "Dobro jutro" : h >= 10 && h < 18 ? "Dober dan" : "Dober večer";
+};
 const polnoc = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 
 // »danes«, »jutri«, »pojutrišnjem«, »včeraj« ali »pet 17. 10.«

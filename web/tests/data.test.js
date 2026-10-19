@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { drevo, ZACETNE_MAPE, dan, opomnikiZa, opisOpomnikov, platformeIme, vrstaDatoteke, velikost } from "../src/data.js";
+import { drevo, pozdrav, ZACETNE_MAPE, dan, opomnikiZa, opisOpomnikov, platformeIme, vrstaDatoteke, velikost } from "../src/data.js";
 
 test("drevo kot na skici", () => {
   const d = drevo(ZACETNE_MAPE);
@@ -103,4 +103,12 @@ test("barve članov in komu je naloga", async () => {
   assert.equal(nalogaZa({ za: "nives.ploj@gmail.com" }, "nives.ploj@gmail.com"), true);
   assert.equal(nalogaZa({ za: "" }, "teo.simonic7@gmail.com"), true);
   assert.equal(nalogaZa({}, "teo.simonic7@gmail.com"), true);
+});
+
+test("pozdrav glede na uro", () => {
+  const ob = (h) => pozdrav(new Date(2026, 9, 12, h));
+  assert.equal(ob(7), "Dobro jutro");
+  assert.equal(ob(13), "Dober dan");
+  assert.equal(ob(20), "Dober večer");
+  assert.equal(ob(2), "Dober večer");
 });
