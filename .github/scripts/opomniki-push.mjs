@@ -3,7 +3,7 @@
 // Repozitorij je javen: v dnevnik ne izpisujemo imen map, opisov ali e-pošte.
 import crypto from "node:crypto";
 import http2 from "node:http2";
-import { nujnost, odgovoren, terminOpomnika, platformeIme, dan, ura } from "../../web/src/data.js";
+import { nujnost, odgovoren, terminOpomnika, platformeIme, dan, ura, ZACETNI_CLANI } from "../../web/src/data.js";
 
 const { P, TOKEN, APNS_KEY_P8, APNS_KEY_ID, APPLE_TEAM_ID } = process.env;
 const TOPIC = process.env.BUNDLE_ID || "com.byurska.studio";
@@ -72,6 +72,17 @@ async function poslji(zetoni, naslov, besedilo, objava) {
   })));
   client.close();
   return { ok, mrtvi };
+}
+
+// Ročni preizkus: testno obvestilo samo izbranemu članu (npr. PREIZKUS=Teo).
+if (process.env.PREIZKUS) {
+  const email = Object.keys(ZACETNI_CLANI).find((e) => ZACETNI_CLANI[e] === process.env.PREIZKUS);
+  const naprave = email ? await poizvedba("naprave", "email", "EQUAL", { stringValue: email }) : [];
+  if (!naprave.length) { console.log("::warning::Ta član še nima prijavljenega telefona: posodobi aplikacijo s TestFlighta in jo odpri."); process.exit(1); }
+  const { ok, mrtvi } = await poslji(naprave.map((n) => n.id), "Preizkus opomnikov", "Obvestila delujejo. Ko objava utripa, te opomnimo ob 9:00 in 18:00.", "");
+  for (const t of mrtvi) await api(`/naprave/${t}`, { method: "DELETE" });
+  console.log(`Preizkus: telefonov ${naprave.length}, poslanih ${ok}.`);
+  process.exit(ok ? 0 : 1);
 }
 
 const termin = terminOpomnika();
