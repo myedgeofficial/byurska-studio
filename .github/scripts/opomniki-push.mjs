@@ -3,7 +3,7 @@
 // Repozitorij je javen: v dnevnik ne izpisujemo imen map, opisov ali e-pošte.
 import crypto from "node:crypto";
 import http2 from "node:http2";
-import { nujnost, odgovoren, terminOpomnika, platformeIme, dan, ura, ZACETNI_CLANI } from "../../web/src/data.js";
+import { nujnost, odgovoren, terminOpomnika, platformeIme, dan, ura, ZACETNI_CLANI, vidiObjave } from "../../web/src/data.js";
 
 const { P, TOKEN, APNS_KEY_P8, APNS_KEY_ID, APPLE_TEAM_ID } = process.env;
 const TOPIC = process.env.BUNDLE_ID || "com.byurska.studio";
@@ -93,7 +93,7 @@ const objave = (await poizvedba("objave", "objavljeno", "EQUAL", { booleanValue:
 let poslanih = 0;
 for (const o of objave) {
   const kdo = odgovoren(o);
-  if (!kdo) continue;
+  if (!kdo || !vidiObjave(kdo)) continue;
   const stanje = await api(`/push/${o.id}`);
   if (stanje?.fields?.zadnji?.stringValue === termin) continue;
   const naprave = await poizvedba("naprave", "email", "EQUAL", { stringValue: kdo });
