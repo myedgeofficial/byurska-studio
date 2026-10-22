@@ -122,8 +122,9 @@ function renderPrijava(err = "") {
   view.className = "";
   const nov = nacin === "nov";
   view.innerHTML = `
-  <div style="padding-top:12vh">
-    <h1>Remako Studio</h1>
+  <div class="prijava" style="padding-top:12vh">
+    <div class="znamka prijava-logo"><b><i>[</i>R<i>]</i>EMAKO<i class="pk">.</i></b></div>
+    <h1>Remako <span class="grad">Studio</span><span style="color:#ff2d55">.</span></h1>
     <p class="muted">Skupni prostor za objave, vsebino in gesla.</p>
     <form id="f" novalidate>
       <label for="em">E-pošta</label>
@@ -344,7 +345,8 @@ function renderDomov() {
   const datum = new Date().toLocaleDateString("sl-SI", { weekday: "long", day: "numeric", month: "long" });
   view.className = "domov";
   view.innerHTML = `
-  <div class="top"><div class="grow"><div class="datum">${esc(datum)}</div><h1>${esc(pozdrav())}, ${esc(imeClana(jaz))}!</h1></div><button class="iconbtn" id="nast" aria-label="Nastavitve">${ico.nast}</button></div>
+  <div class="top"><div class="grow"><div class="znamka"><b><i>[</i>R<i>]</i>EMAKO<i class="pk">.</i></b><span>Studio</span></div></div><button class="iconbtn" id="nast" aria-label="Nastavitve">${ico.nast}</button></div>
+  <div class="top"><div class="grow"><div class="datum">${esc(datum)}</div><h1>${esc(pozdrav())}, <span class="grad">${esc(imeClana(jaz))}</span><span style="color:#ff2d55">.</span></h1></div></div>
   <div class="dom">
   <div class="dom-side">
   <div class="d-moje">${mojeNaloge()}${zaPregled()}</div>
@@ -1241,7 +1243,7 @@ function renderNastavitve() {
 (async function zagon() {
   await loadPrefs();
   if (!cfg) {
-    view.innerHTML = `<div class="center"><h1>Remako Studio</h1><p class="muted">Strežnik še ni povezan.</p></div>`;
+    view.innerHTML = `<div class="center"><div class="znamka prijava-logo"><b><i>[</i>R<i>]</i>EMAKO<i class="pk">.</i></b><span>Studio</span></div><p class="muted">Strežnik še ni povezan.</p></div>`;
     return;
   }
   initFb();
