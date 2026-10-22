@@ -12,7 +12,7 @@ import {
 import { getStorage, ref, uploadBytesResumable, uploadBytes, getDownloadURL, deleteObject, connectStorageEmulator } from "firebase/storage";
 import {
   ZACETNI_CLANI, ZACETNE_MAPE, PLATFORME, platformeIme, drevo, dan, ura, pozdrav, kdajBesedilo, opomnikiZa, PRIVZETI_OPOMNIKI, opisOpomnikov,
-  vrstaDatoteke, velikost, veljavenEmail, nujnost, znesek, evri, kratkoIme, stevilo, ics, barvaClana, nalogaZa
+  vrstaDatoteke, velikost, veljavenEmail, nujnost, znesek, evri, kratkoIme, stevilo, ics, barvaClana, nalogaZa, odgovoren
 } from "./data.js";
 import { novaSol, kljucIzGesla, zakleni, odkleni, preveritev, pravilen } from "./trezor.js";
 
@@ -252,6 +252,17 @@ async function zacni(u) {
     prefs.obvestilaVprasal = true; savePrefs();
     Studio.dovoljenje().then(planirajObvestila).catch(() => {});
   }
+  prijaviTelefon();
+}
+
+// Telefon se prijavi za potisna obvestila: ko objava utripa, strežnik dvakrat na dan opomni tistega, ki jo mora narediti.
+let mojZeton = "";
+async function prijaviTelefon() {
+  if (!native) return;
+  const r = await Studio.pushZeton().catch(() => null);
+  if (!r?.zeton) return;
+  mojZeton = r.zeton;
+  await setDoc(doc(db, "naprave", mojZeton), { email: jaz, ob: Date.now() }).catch(() => {});
 }
 
 async function posejMape() {
@@ -448,7 +459,7 @@ function vrsticaObjave(o) {
   const zamuda = !o.objavljeno && o.kdaj < Date.now(), n = nujnost(o);
   return `<button class="obj${o.objavljeno ? " done" : ""}${zamuda ? " late" : ""}${n ? ` utripa ${n}` : ""}" data-o="${esc(o.id)}">
     <div class="when"><b>${esc(dan(o.kdaj))}</b>${ura(new Date(o.kdaj))}</div>
-    <div class="what"><div>${esc(imeMape(o.mapa))}</div><small>${esc(zaklenjena(mapa(o.mapa)) ? "Zaklenjena mapa" : o.opis || (o.objavljeno ? "Objavljeno" : imeClana(o.dodal)))}</small></div>
+    <div class="what"><div>${esc(imeMape(o.mapa))}</div><small>${esc(zaklenjena(mapa(o.mapa)) ? "Zaklenjena mapa" : o.opis || (o.objavljeno ? "Objavljeno" : `Objavi: ${imeClana(odgovoren(o))}`))}</small></div>
     <div class="pl">${(o.platforme || []).map((p) => `<span>${p === "ig" ? "IG" : "TT"}</span>`).join("")}</div>
   </button>`;
 }
@@ -484,7 +495,7 @@ function pokaziObjavo(id) {
     <p>${esc(kdajBesedilo(o.kdaj))}</p>
     ${o.opis ? `<p class="sel muted">${esc(o.opis)}</p>` : ""}
     ${d ? `<div class="preview">${predogled(d)}</div><button class="btn ghost" id="deli">Shrani ali deli vsebino</button>` : ""}
-    <p class="small muted">Tvoji opomniki: ${esc(opisOpomnikov(prefs.opomniki))}. Dodano: ${esc(imeClana(o.dodal))}.</p>
+    <p class="small muted">Objavi: <span class="oseba" style="--c:${barvaClana(odgovoren(o))}">${esc(imeClana(odgovoren(o)))}</span>${o.objavljeno ? "" : " (dobi opomnik na telefon dvakrat na dan, ko objava utripa)"}. Tvoji opomniki: ${esc(opisOpomnikov(prefs.opomniki))}. Dodano: ${esc(imeClana(o.dodal))}.</p>
     <div class="row"><button class="btn ghost" id="kol">V Koledar</button>${native ? `<button class="btn ghost" id="opo">V Opomnike</button>` : ""}</div>
     <button class="btn" id="obj">${o.objavljeno ? "Ni še objavljeno" : "Označi kot objavljeno"}</button>
     <div class="row"><button class="btn ghost" id="ured">Uredi</button><button class="btn danger" id="brisi">Izbriši</button></div>`, () => {
@@ -538,6 +549,8 @@ function urediObjavo(o = {}, privzeto = {}) {
       <div><label for="od">Dan</label><input id="od" type="date" value="${vDatum(kdaj)}"></div>
       <div><label for="ou">Ura</label><input id="ou" type="time" value="${ura(kdaj)}"></div>
     </div>
+    <label>Kdo objavi</label>
+    ${izbiraZa("okdo", odgovoren(o) || jaz, true)}
     <label for="oo">Kaj objavimo <span class="muted">(ni obvezno)</span></label>
     <textarea id="oo" maxlength="500" placeholder="npr. Reel z novim izgledom, besedilo v opisu">${esc(o.opis || "")}</textarea>
     <p class="small muted">Opomnik: ${esc(opisOpomnikov(prefs.opomniki))}. Vsak si ga nastavi v Nastavitvah.</p>
@@ -555,6 +568,7 @@ function urediObjavo(o = {}, privzeto = {}) {
       c.setAttribute("aria-pressed", arr.includes(k));
     }));
     tog("#op", st.platforme, false);
+    vezIzbiroZa("okdo", () => {});
     $("oshrani").onclick = async () => {
       const [y, m, d] = $("od").value.split("-").map(Number);
       const [h, mi] = ($("ou").value || "18:00").split(":").map(Number);
@@ -563,7 +577,7 @@ function urediObjavo(o = {}, privzeto = {}) {
       if (!st.platforme.length) return err("Izberi Instagram ali TikTok.");
       const data = {
         mapa: $("om").value, platforme: st.platforme, kdaj: new Date(y, m - 1, d, h || 0, mi || 0).getTime(),
-        opis: $("oo").value.trim(), datoteka: st.datoteka || null
+        opis: $("oo").value.trim(), datoteka: st.datoteka || null, kdo: izbranZa("okdo") || jaz
       };
       $("oshrani").disabled = true;
       try {
@@ -918,9 +932,9 @@ function pokaziDatoteko(id) {
 /* ---------- TO DO s stroški ---------- */
 // Člani ekipe za izbiro, komu je naloga (Teo, Urška, Nives in kdor je dodan).
 const claniEkipe = () => [...new Set([...Object.keys(ZACETNI_CLANI), ...Object.keys(S.clani)])];
-const izbiraZa = (id, izbran) => `<div class="chips za" id="${id}">${claniEkipe().map((e) =>
+const izbiraZa = (id, izbran, brezVsi) => `<div class="chips za" id="${id}">${claniEkipe().map((e) =>
   `<button type="button" class="chip" data-za="${esc(e)}" style="--c:${barvaClana(e)}" aria-pressed="${izbran === e}">${esc(imeClana(e))}</button>`).join("")}
-  <button type="button" class="chip" data-za="" style="--c:#98a2b3" aria-pressed="${!izbran}">Vsi</button></div>`;
+  ${brezVsi ? "" : `<button type="button" class="chip" data-za="" style="--c:#98a2b3" aria-pressed="${!izbran}">Vsi</button>`}</div>`;
 function vezIzbiroZa(id, ob) {
   document.querySelectorAll(`#${id} [data-za]`).forEach((b) => (b.onclick = () => {
     document.querySelectorAll(`#${id} [data-za]`).forEach((x) => x.setAttribute("aria-pressed", x === b));
@@ -1217,6 +1231,7 @@ function renderNastavitve() {
   $("odjava").onclick = async () => {
     if (!confirm("Odjava?")) return;
     if (native) Studio.obvestila({ seznam: [] }).catch(() => {});
+    if (mojZeton) await deleteDoc(doc(db, "naprave", mojZeton)).catch(() => {});
     S.kljuc = null; S.kljucOk = false; M.odklenjena = {}; await kljucShramba.pisi("");
     signOut(auth);
   };

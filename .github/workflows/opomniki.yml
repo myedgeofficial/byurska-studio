@@ -1,0 +1,41 @@
+name: Opomniki za objave
+
+# Dvakrat na dan (od 9:00 in od 18:00 po slovenskem času) pošlje potisno obvestilo tistemu,
+# ki mora narediti objavo, ki utripa. Dokler objava ni označena kot objavljena.
+# Ure UTC pokrivajo poletni in zimski čas; skripta sama pošlje vsak termin samo enkrat.
+# Skrivnosti: FIREBASE_SERVICE_ACCOUNT, APPLE_TEAM_ID, APNS_KEY_P8 in APNS_KEY_ID (ključ za obvestila iz Apple Developer).
+on:
+  schedule:
+    - cron: "5 7,8,16,17 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: opomniki
+
+jobs:
+  poslji:
+    runs-on: ubuntu-latest
+    env:
+      P: ${{ vars.FIREBASE_PROJECT || 'byurska-studio' }}
+      BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID || 'com.byurska.studio' }}
+      TZ: Europe/Ljubljana
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pošlji obvestila
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          APNS_KEY_P8: ${{ secrets.APNS_KEY_P8 }}
+          APNS_KEY_ID: ${{ secrets.APNS_KEY_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$SA" ]; then echo "::warning::Manjka skrivnost FIREBASE_SERVICE_ACCOUNT."; exit 0; fi
+          if [ -z "$APNS_KEY_P8" ] || [ -z "$APNS_KEY_ID" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "::warning::Manjkata skrivnosti APNS_KEY_P8 in APNS_KEY_ID (ključ .p8 za obvestila, isti kot pri Nakupku)."; exit 0
+          fi
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          gcloud auth activate-service-account --key-file="$RUNNER_TEMP/sa.json" --quiet
+          rm -f "$RUNNER_TEMP/sa.json"
+          TOKEN=$(gcloud auth print-access-token) node .github/scripts/opomniki-push.mjs

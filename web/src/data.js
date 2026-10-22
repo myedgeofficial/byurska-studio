@@ -58,6 +58,14 @@ export function nujnost(o, zdaj = Date.now()) {
   const razlika = Math.round((polnoc(new Date(o.kdaj)) - polnoc(new Date(zdaj))) / 864e5);
   return razlika <= 1 ? "rdeca" : razlika === 2 ? "oranzna" : "";
 }
+// Kdo mora objavo narediti: izbrana oseba (polje »kdo«), pri starih objavah tisti, ki jo je dodal.
+export const odgovoren = (o) => String(o?.kdo || o?.dodal || "").toLowerCase();
+// Termin potisnega obvestila za utripajoče objave: dvakrat na dan, zjutraj od 9:00 in zvečer od 18:00.
+export function terminOpomnika(zdaj = Date.now()) {
+  const d = new Date(zdaj), h = d.getHours();
+  if (h < 9) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${h >= 18 ? "vecer" : "jutro"}`;
+}
 export const kdajBesedilo = (ms, zdaj) => `${dan(ms, zdaj)} ob ${ura(new Date(ms))}`;
 
 // Vsak si sam nastavi, kdaj ga telefon opomni (Nastavitve › Opomniki). Privzeto 2 in 1 dan prej ob 9:00 ter ob uri objave.
