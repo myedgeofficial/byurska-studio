@@ -1,4 +1,4 @@
-# Byurska Studio
+# Remako Studio
 
 Zasebna iPhone aplikacija za ekipo (Teo, Urška, Nives), samo prek TestFlighta.
 Na računalniku: **https://byurska-studio.web.app** (ista prijava in podatki, objavi se samodejno z workflowom *Spletna različica*).

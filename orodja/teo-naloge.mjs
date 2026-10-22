@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Teove naloge iz Byurska Studia za samodejno delo v oblaku.
+// Teove naloge iz Remako Studia za samodejno delo v oblaku.
 // Prijava kot Teo (BYURSKA_EMAIL, BYURSKA_GESLO), brez dodatnih knjižnic.
 //   node orodja/teo-naloge.mjs seznam                       odprte naloge za Teota in za Vse (JSON)
 //   node orodja/teo-naloge.mjs opravljeno <mapa> <id> "kaj je narejeno"

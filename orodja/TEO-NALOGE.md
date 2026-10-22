@@ -5,7 +5,7 @@ Ura za uro se zažene seja, ki dela namesto Teota. V aplikaciji je vse videti, k
 ## Postopek
 1. `node orodja/teo-naloge.mjs seznam` vrne odprte naloge za Teota (`za` = njegov e-naslov) in za Vse (`za` = "vsi").
 2. Vzemi nalogo, ki je dodeljena Teotu. Nalogo pod "vsi" vzemi samo, če iz besedila jasno izhaja, da je mišljena za Teota
-   (omenja Teota, aplikacije, kodo, splet, Nakupko, Fixko, Byurska Studio, tehnične stvari ...). Kar je očitno za Urško ali Nives, pusti pri miru.
+   (omenja Teota, aplikacije, kodo, splet, Nakupko, Fixko, Remako Studio, tehnične stvari ...). Kar je očitno za Urško ali Nives, pusti pri miru.
 3. Nalogo naredi do konca. Potem `node orodja/teo-naloge.mjs opravljeno <mapa> <id> "kratek opis, kaj je narejeno in kje je rezultat"`.
    Datoteke (videi, slike, PDF), ki jih naloga zahteva v aplikaciji, naloži z
    `node orodja/teo-naloge.mjs nalozi <mapa> urejeno|surovo <datoteka> "caption"` (caption objave se shrani skupaj z datoteko) (urejeno = končna vsebina, surovo = surovi material).
