@@ -1,6 +1,6 @@
 {
   "appId": "com.byurska.studio",
-  "appName": "Byurska",
+  "appName": "Remako Studio",
   "webDir": "www",
   "ios": {
     "contentInset": "never",

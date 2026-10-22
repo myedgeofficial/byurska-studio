@@ -1,0 +1,26 @@
+name: Ime aplikacije
+
+# Ime v App Store Connect (TestFlight). Zažene se samodejno, ko se spremeni privzeto ime spodaj.
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/ime.yml"]
+  workflow_dispatch:
+    inputs:
+      ime:
+        description: "Novo ime v App Store Connect"
+        default: "Remako Studio"
+
+jobs:
+  ime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install pyjwt cryptography requests
+      - run: python3 .github/scripts/ime.py
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          KEY_P8: ${{ secrets.APPSTORE_KEY_P8 }}
+          BUNDLE_ID: com.byurska.studio
+          IME: ${{ inputs.ime || 'Remako Studio' }}

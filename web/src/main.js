@@ -123,7 +123,7 @@ function renderPrijava(err = "") {
   const nov = nacin === "nov";
   view.innerHTML = `
   <div style="padding-top:12vh">
-    <h1>Byurska</h1>
+    <h1>Remako Studio</h1>
     <p class="muted">Skupni prostor za objave, vsebino in gesla.</p>
     <form id="f" novalidate>
       <label for="em">E-pošta</label>
@@ -1171,7 +1171,7 @@ function renderNastavitve() {
     <p class="small muted" id="nopis">${esc(opisOpomnikov(prefs.opomniki))}</p>
   </div>
   <button class="btn ghost" id="obv">Vklopi obvestila</button>
-  <p class="small muted">Nastavitve veljajo samo za tvoj telefon. Če obvestila ne pridejo, jih vklopi v Nastavitve › Obvestila › Byurska.</p>
+  <p class="small muted">Nastavitve veljajo samo za tvoj telefon. Če obvestila ne pridejo, jih vklopi v Nastavitve › Obvestila › Remako Studio.</p>
   </div>
   ${native ? "" : `<h2>Opomniki</h2><p class="small muted">Opomnike za objave dobiš na telefonu. Na računalniku objavo dodaš v koledar z gumbom V Koledar.</p>`}
   <h2>Gesla</h2>
@@ -1210,7 +1210,7 @@ function renderNastavitve() {
   $("obv").onclick = async () => {
     if (!native) return toast("Deluje v aplikaciji na iPhonu.");
     const r = await Studio.dovoljenje().catch(() => ({}));
-    toast(r.dovoljeno ? "Obvestila so vklopljena." : "Vklopi jih v Nastavitve › Obvestila › Byurska.");
+    toast(r.dovoljeno ? "Obvestila so vklopljena." : "Vklopi jih v Nastavitve › Obvestila › Remako Studio.");
     planirajObvestila();
   };
   $("pozabi").onclick = async () => { S.kljuc = null; S.kljucOk = false; M.odklenjena = {}; await kljucShramba.pisi(""); toast("Gesla so zaklenjena. Za ogled vpiši skupno geslo."); };
@@ -1226,7 +1226,7 @@ function renderNastavitve() {
 (async function zagon() {
   await loadPrefs();
   if (!cfg) {
-    view.innerHTML = `<div class="center"><h1>Byurska</h1><p class="muted">Strežnik še ni povezan.</p></div>`;
+    view.innerHTML = `<div class="center"><h1>Remako Studio</h1><p class="muted">Strežnik še ni povezan.</p></div>`;
     return;
   }
   initFb();

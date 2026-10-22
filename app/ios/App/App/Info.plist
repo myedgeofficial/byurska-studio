@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>sl</string>
 	<key>CFBundleDisplayName</key>
-        <string>Byurska</string>
+        <string>Remako Studio</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -25,21 +25,21 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
-	<string>Byurska doda objavo v tvoj koledar.</string>
+	<string>Remako Studio doda objavo v tvoj koledar.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Byurska doda objavo v tvoj koledar.</string>
+	<string>Remako Studio doda objavo v tvoj koledar.</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>Byurska doda objavo v tvoj koledar.</string>
+	<string>Remako Studio doda objavo v tvoj koledar.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
-	<string>Byurska doda objavo med tvoje opomnike.</string>
+	<string>Remako Studio doda objavo med tvoje opomnike.</string>
 	<key>NSRemindersUsageDescription</key>
-	<string>Byurska doda objavo med tvoje opomnike.</string>
+	<string>Remako Studio doda objavo med tvoje opomnike.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Byurska naloži slike in videe v skupno mapo.</string>
+	<string>Remako Studio naloži slike in videe v skupno mapo.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Byurska shrani vsebino v tvoje Fotografije, da jo lahko objaviš.</string>
+	<string>Remako Studio shrani vsebino v tvoje Fotografije, da jo lahko objaviš.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Byurska lahko posname vsebino naravnost v mapo.</string>
+	<string>Remako Studio lahko posname vsebino naravnost v mapo.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

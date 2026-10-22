@@ -2,7 +2,7 @@
   "name": "byurska-studio-app",
   "private": true,
   "version": "1.0.0",
-  "description": "Byurska Studio iOS aplikacija (Capacitor)",
+  "description": "Remako Studio iOS aplikacija (Capacitor)",
   "scripts": {
     "www": "node scripts/build-www.js",
     "sync": "node scripts/build-www.js && npx cap sync ios"
