@@ -79,7 +79,7 @@ if (process.env.PREIZKUS) {
   const email = Object.keys(ZACETNI_CLANI).find((e) => ZACETNI_CLANI[e] === process.env.PREIZKUS);
   const naprave = email ? await poizvedba("naprave", "email", "EQUAL", { stringValue: email }) : [];
   if (!naprave.length) { console.log("::warning::Ta član še nima prijavljenega telefona: posodobi aplikacijo s TestFlighta in jo odpri."); process.exit(1); }
-  const { ok, mrtvi } = await poslji(naprave.map((n) => n.id), "Preizkus opomnikov", "Obvestila delujejo. Ko objava utripa, te opomnimo ob 9:00 in 18:00.", "");
+  const { ok, mrtvi } = await poslji(naprave.map((n) => n.id), process.env.PREIZKUS_NASLOV || "Preizkus opomnikov", process.env.PREIZKUS_BESEDILO || "Obvestila delujejo. Ko objava utripa, te opomnimo ob 9:00 in 18:00.", "");
   for (const t of mrtvi) await api(`/naprave/${t}`, { method: "DELETE" });
   console.log(`Preizkus: telefonov ${naprave.length}, poslanih ${ok}.`);
   process.exit(ok ? 0 : 1);

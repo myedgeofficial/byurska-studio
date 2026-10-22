@@ -14,6 +14,12 @@ on:
         type: choice
         options: ["", "Teo", "Urška", "Nives"]
         default: ""
+      naslov:
+        description: "Naslov testnega obvestila (ni obvezno)"
+        default: ""
+      besedilo:
+        description: "Besedilo testnega obvestila (ni obvezno)"
+        default: ""
 
 concurrency:
   group: opomniki
@@ -37,6 +43,8 @@ jobs:
           APNS_KEY_ID: ${{ secrets.APNS_KEY_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           PREIZKUS: ${{ inputs.preizkus }}
+          PREIZKUS_NASLOV: ${{ inputs.naslov }}
+          PREIZKUS_BESEDILO: ${{ inputs.besedilo }}
         run: |
           if [ -z "$SA" ]; then echo "::warning::Manjka skrivnost FIREBASE_SERVICE_ACCOUNT."; exit 0; fi
           if [ -z "$APNS_KEY_P8" ] || [ -z "$APNS_KEY_ID" ] || [ -z "$APPLE_TEAM_ID" ]; then
