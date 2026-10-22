@@ -944,10 +944,9 @@ function renderNaloge(el, m) {
     <button class="grow" data-n="${esc(n.id)}"><div class="ob">${esc(n.besedilo)}</div>${n.porocilo ? `<div class="porocilo">${esc(n.porocilo)}</div>` : ""}<small>${stanje(n)}</small></button>
     ${lahkoPregledam(n) ? `<button class="pregledano" data-pr="${esc(m.id)}/${esc(n.id)}">Pregledano</button>` : ""}
     ${n.strosek ? `<span class="eur">${evri(n.strosek)}</span>` : ""}</div>`;
-  if (osnutek.za === undefined) osnutek.za = jaz;
   el.innerHTML = `<div class="dvo"><div class="dvo-l"><div class="opn hitro${osnutek.odprt ? " odprt" : ""}">
     <div class="vnos"><textarea id="tn" rows="1" maxlength="2000" placeholder="Nova naloga …"></textarea><button class="plusbtn" id="tdd" aria-label="Dodaj">${ico.plus}</button></div>
-    <div class="vec-moznosti">${izbiraZa("tza", osnutek.za)}
+    <div class="vec-moznosti">
     <div class="row"><input id="tz" inputmode="decimal" placeholder="Strošek €"><button class="btn ghost" id="tdn" title="Vpiši delo, ki si ga že opravil, da ga drugi pregledajo">Že opravljeno</button></div></div></div>
     ${vsota(M.naloge) ? `<div class="stroski-v">Stroški <b>${evri(vsota(M.naloge))}</b><span>·</span>še odprto <b>${evri(vsota(odprte))}</b></div>` : ""}</div>
     <div class="dvo-r"><div class="list" style="margin-top:12px">${odprte.length ? odprte.map(vrstica).join("") : `<div class="empty">Ni odprtih nalog.</div>`}</div>
@@ -958,15 +957,20 @@ function renderNaloge(el, m) {
   // Kdo, strošek in »Že opravljeno« se pokažejo šele, ko začneš pisati nalogo.
   $("tn").onfocus = () => { osnutek.odprt = true; el.querySelector(".opn").classList.add("odprt"); };
   $("tn").onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); dodaj(false); } };
-  vezIzbiroZa("tza", (za) => (osnutek.za = za));
   const dodaj = (opravljeno) => {
     const besedilo = $("tn").value.trim();
     if (!besedilo) return toast(opravljeno ? "Napiši, kaj je narejeno." : "Napiši, kaj je treba narediti.");
-    // Polji izpraznimo takoj, da se medtem lahko že piše naslednja naloga.
     const strosek = znesek($("tz").value);
-    $("tn").value = ""; $("tz").value = ""; osnutek.tn = osnutek.tz = "";
-    addDoc(collection(db, "mape", m.id, "naloge"), { besedilo, strosek, za: izbranZa("tza"), dodal: jaz, ob: Date.now(), ...oznaciNarejeno(opravljeno) })
-      .then(() => opravljeno && toast("Vpisano, drugi ga vidijo za pregled")).catch(napaka);
+    const shrani = (za) => {
+      // Polji izpraznimo takoj, da se medtem lahko že piše naslednja naloga.
+      $("tn").value = ""; $("tz").value = ""; osnutek.tn = osnutek.tz = "";
+      addDoc(collection(db, "mape", m.id, "naloge"), { besedilo, strosek, za, dodal: jaz, ob: Date.now(), ...oznaciNarejeno(opravljeno) })
+        .then(() => toast(opravljeno ? "Vpisano, drugi ga vidijo za pregled" : za ? `Naloga je za: ${imeClana(za)}` : "Naloga je za vse")).catch(napaka);
+    };
+    // Opravljeno delo je tvoje; za novo nalogo na koncu vprašamo, kdo jo mora narediti.
+    if (opravljeno) return shrani(jaz);
+    $("tn").blur();
+    komuNaloga(besedilo, shrani);
   };
   $("tdd").onclick = () => dodaj(false);
   $("tdn").onclick = () => dodaj(true);
@@ -976,6 +980,16 @@ function renderNaloge(el, m) {
     if (n) updateDoc(doc(db, "mape", m.id, "naloge", n.id), { ...oznaciNarejeno(!n.narejeno), uredil: jaz }).catch(napaka);
   }));
   el.querySelectorAll("[data-n]").forEach((b) => (b.onclick = () => urediNalogo(m, M.naloge.find((x) => x.id === b.dataset.n))));
+}
+
+// Jasno vprašanje po vnosu naloge: komu je naloga (Teo, Urška, Nives ali vsem).
+function komuNaloga(besedilo, izberi) {
+  openSheet(`<h3>Komu je ta naloga?</h3>
+    <p class="muted sel">${esc(besedilo.length > 120 ? besedilo.slice(0, 120) + " …" : besedilo)}</p>
+    <div class="komu">${claniEkipe().map((e) => `<button class="komu-o" data-za="${esc(e)}" style="--c:${barvaClana(e)}"><span class="pika-oseba"></span>${esc(imeClana(e))}${e === jaz ? ` <small>(jaz)</small>` : ""}</button>`).join("")}
+    <button class="komu-o" data-za="" style="--c:#98a2b3"><span class="pika-oseba"></span>Vsem</button></div>`, (box) => {
+    box.querySelectorAll("[data-za]").forEach((b) => (b.onclick = () => { closeSheet(); izberi(b.dataset.za); }));
+  });
 }
 
 function urediNalogo(m, n) {

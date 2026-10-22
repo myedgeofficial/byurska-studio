@@ -429,3 +429,10 @@ input[type="date"], input[type="time"] { min-height: 48px; }
   .dvo-l .opn.hitro.odprt textarea { min-height: 120px; }
 }
 @media (min-width: 1100px) { .domov .dom { margin-top: 22px; } }
+
+/* Komu je naloga: velik izbor po vnosu naloge */
+.komu { display: grid; gap: 10px; margin-top: 14px; }
+.komu-o { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-radius: 16px; border: 1px solid var(--line2); background: transparent; font-size: 17px; font-weight: 600; text-align: left; }
+.komu-o .pika-oseba { width: 14px; height: 14px; border-radius: 50%; background: var(--c); flex: none; }
+.komu-o small { font-weight: 400; opacity: .6; }
+.komu-o:active { background: color-mix(in srgb, var(--c) 20%, transparent); border-color: var(--c); }
