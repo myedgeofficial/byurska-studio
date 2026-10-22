@@ -340,8 +340,8 @@ function renderDomov() {
       <span class="av" style="--h:${odtenek(m.id)}">${esc(k.ime.charAt(0).toUpperCase())}</span>
       <span class="kt"><b>${esc(k.ime)}</b>${meta ? `<small>${esc(meta)}</small>` : ""}</span>${m.zaklep ? `<span class="kl">${ico.kljucavnica}</span>` : ""}</button>`;
   };
-  const koren = (g) => `<button class="box${ut(g.id)}" data-m="${esc(g.id)}"><b>${esc(g.ime)}${g.zaklep ? ` <span class="kl">${ico.kljucavnica}</span>` : ""}</b>
-    <small>${g.otroci.length ? stevilo(g.otroci.length, g.otroci.every((c) => kratkoIme(c.ime).pod) ? ["stran", "strani", "strani", "strani"] : ["mapa", "mapi", "mape", "map"]) : "prazno"}</small></button>`;
+  const koren = (g) => `<button class="box grp-ime${ut(g.id)}" data-m="${esc(g.id)}"><b>${esc(g.ime)}</b>${g.zaklep ? `<span class="kl">${ico.kljucavnica}</span>` : ""}
+    <small>${g.otroci.length ? stevilo(g.otroci.length, g.otroci.every((c) => kratkoIme(c.ime).pod) ? ["stran", "strani", "strani", "strani"] : ["mapa", "mapi", "mape", "map"]) : "prazno"}</small>${ico.chev}</button>`;
   const datum = new Date().toLocaleDateString("sl-SI", { weekday: "long", day: "numeric", month: "long" });
   view.className = "domov";
   view.innerHTML = `
@@ -353,12 +353,11 @@ function renderDomov() {
   <div class="d-obj"><div class="h2row"><h2>Objave</h2><button id="vse">Vse</button></div>
   <div class="next">${prih.length ? prih.slice(0, 3).map(vrsticaObjave).join("") : `<div class="empty">Ni načrtovanih objav.</div>`}</div></div>
   </div>
-  <div class="map dots">
+  <div class="map"><h2 class="map-h">Mape</h2>
     ${S.nalozeno ? drevo(S.mape).map((g) => `
       <section class="grp">
-        <svg class="lines"></svg>
-        <div class="root">${koren(g)}</div>
-        <div class="kids">${g.otroci.map(otrok).join("")}<button class="plusbox" data-dodaj="${esc(g.id)}">+ Dodaj</button></div>
+        <div class="grp-h">${koren(g)}<button class="grp-plus" data-dodaj="${esc(g.id)}" aria-label="Dodaj mapo v ${esc(g.ime)}">${ico.plus}</button></div>
+        <div class="kids">${g.otroci.map(otrok).join("")}${g.otroci.length ? "" : `<button class="plusbox" data-dodaj="${esc(g.id)}">+ Dodaj mapo</button>`}</div>
       </section>`).join("") : `<div class="center"><div class="spin"></div></div>`}
     <button class="addmap" id="addmap">+ Nova skupina</button>
   </div>
@@ -380,7 +379,6 @@ function renderDomov() {
   vezObjave(view);
   vezMojeNaloge();
   vezPregled(view);
-  requestAnimationFrame(narisiCrte);
 }
 
 // Moje naloge: odprte naloge iz vseh map, ki so zame ali za vse (brez zaklenjenih map).
@@ -441,27 +439,13 @@ function vezPregled(el) {
   }));
 }
 
-// Črte kot na skici: od skupine do vsake mape, z mehkim zavojem.
-function narisiCrte() {
-  view.querySelectorAll(".grp").forEach((g) => {
-    const svg = g.querySelector("svg.lines"), root = g.querySelector(".root .box"), kids = [...g.querySelectorAll(".kids .box")];
-    if (!svg || !root || !kids.length) return;
-    const o = g.getBoundingClientRect(), r = root.getBoundingClientRect();
-    const x1 = r.right - o.left + 2, y1 = r.top + r.height / 2 - o.top;
-    svg.innerHTML = kids.map((k) => {
-      const b = k.getBoundingClientRect(), x2 = b.left - o.left - 2, y2 = b.top + b.height / 2 - o.top, xm = (x1 + x2) / 2;
-      return `<path d="M${x1},${y1} C${xm},${y1} ${xm},${y2} ${x2},${y2}"/>`;
-    }).join("") + `<circle cx="${x1}" cy="${y1}" r="3.5"/>`;
-  });
-}
-window.addEventListener("resize", () => pot.zaslon === "domov" && narisiCrte());
 
 /* =================== OBJAVE =================== */
 function vrsticaObjave(o) {
   const zamuda = !o.objavljeno && o.kdaj < Date.now(), n = nujnost(o);
   return `<button class="obj${o.objavljeno ? " done" : ""}${zamuda ? " late" : ""}${n ? ` utripa ${n}` : ""}" data-o="${esc(o.id)}">
     <div class="when"><b>${esc(dan(o.kdaj))}</b>${ura(new Date(o.kdaj))}</div>
-    <div class="what"><div>${esc(imeMape(o.mapa))}</div><small>${esc(zaklenjena(mapa(o.mapa)) ? "Zaklenjena mapa" : o.opis || (o.objavljeno ? "Objavljeno" : `Objavi: ${imeClana(odgovoren(o))}`))}</small></div>
+    <div class="what"><div>${esc(kratkoIme(imeMape(o.mapa)).ime)}</div><small>${esc(zaklenjena(mapa(o.mapa)) ? "Zaklenjena mapa" : o.opis || (o.objavljeno ? "Objavljeno" : `Objavi: ${imeClana(odgovoren(o))}`))}</small></div>
     <div class="pl">${(o.platforme || []).map((p) => `<span>${p === "ig" ? "IG" : "TT"}</span>`).join("")}</div>
   </button>`;
 }
@@ -642,7 +626,7 @@ function renderMapa() {
   zadnjiDel[glavni.k] = z;
   view.innerHTML = `
   <div class="top"><button class="iconbtn" id="nazaj" aria-label="Nazaj">${ico.nazaj}</button>
-    <div class="grow"><h1>${esc(m.ime)}</h1></div>
+    <div class="grow">${kratkoIme(m.ime).pod ? `<div class="datum">${esc(kratkoIme(m.ime).pod)}</div>` : ""}<h1>${esc(kratkoIme(m.ime).ime)}</h1></div>
     <button class="iconbtn" id="vec" aria-label="Več">${ico.vec}</button></div>
   ${m.url ? `<a class="small" href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.url.replace(/^https?:\/\//, ""))}</a>` : ""}
   ${otroci.length ? `<div class="sub">${otroci.map((c) => `<button class="box" data-m="${esc(c.id)}">${esc(c.ime)}</button>`).join("")}</div>` : ""}
