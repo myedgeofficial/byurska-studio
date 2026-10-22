@@ -289,7 +289,7 @@ function planirajObvestila() {
 
 /* =================== NAVIGACIJA =================== */
 function pojdi(zaslon, opts = {}) {
-  zgod.push({ ...pot });
+  zgod.push({ ...pot, y: window.scrollY }); // kje si bil, da te Nazaj vrne na isto mesto
   if (pot.mapa !== opts.mapa || zaslon !== "mapa") odjaviMapo();
   Object.assign(pot, { zaslon, mapa: null, zavihek: "" }, opts);
   if (zaslon === "mapa") prijaviMapo(pot.mapa);
@@ -297,13 +297,13 @@ function pojdi(zaslon, opts = {}) {
   osvezi();
 }
 function nazaj() {
-  const p = zgod.pop() || { zaslon: "domov" };
+  const { y = 0, ...p } = zgod.pop() || { zaslon: "domov" };
   if (p.zaslon !== "mapa" || p.mapa !== pot.mapa) odjaviMapo();
   const bilaMapa = pot.mapa;
   Object.assign(pot, { zaslon: "domov", mapa: null, zavihek: "todo" }, p);
   if (pot.zaslon === "mapa" && pot.mapa !== bilaMapa) prijaviMapo(pot.mapa);
-  window.scrollTo(0, 0);
   osvezi();
+  window.scrollTo(0, y);
 }
 function osvezi() {
   if (!jaz) return;
