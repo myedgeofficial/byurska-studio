@@ -32,6 +32,9 @@ const ico = {
   dat: `<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-linejoin="round"><path d="M6 2.5h8l4.5 4.5v14.5H6z"/><path d="M14 2.5V7h4.5"/></svg>`,
   povezava: `<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.7" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 006.4 0l3-3a4.5 4.5 0 00-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 00-6.4 0l-3 3a4.5 4.5 0 006.4 6.4l1-1"/></svg>`,
   kljucavnica: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 018 0v3"/></svg>`,
+  naloge: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`,
+  koledar: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="5.5" width="16" height="15" rx="3"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg>`,
+  mapa: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 012-2h4l2 2.5h7a2 2 0 012 2v7.5a2 2 0 01-2 2h-13a2 2 0 01-2-2z"/></svg>`,
   chev: `<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg>`
 };
 
@@ -327,40 +330,36 @@ const odtenek = (id) => [...String(id)].reduce((h, c) => (h * 31 + c.charCodeAt(
 function renderDomov() {
   const prih = prihajajoce();
   // Mapa utripa po najbolj nujni neobjavljeni objavi (rdeče pred oranžno).
-  const utrip = {}, naslednja = {};
-  for (const o of prih) {
-    const n = nujnost(o); if (n && utrip[o.mapa] !== "rdeca") utrip[o.mapa] = n;
-    if (!naslednja[o.mapa] || o.kdaj < naslednja[o.mapa].kdaj) naslednja[o.mapa] = o;
-  }
+  const utrip = {};
+  for (const o of prih) { const n = nujnost(o); if (n && utrip[o.mapa] !== "rdeca") utrip[o.mapa] = n; }
   const ut = (id) => utrip[id] ? ` utripa ${utrip[id]}` : "";
+  // Ploščica mape: samo začetnica in ime; število odprtih nalog v kotu, bližajoča objava = utripajoč rob.
   const otrok = (m) => {
-    const k = kratkoIme(m.ime), nal = S.naloge[m.id], o = naslednja[m.id];
-    const meta = zaklenjena(m) ? "zaklenjeno" : [o ? `objava ${dan(o.kdaj)}` : "", nal ? stevilo(nal.st, NALOGE) : ""].filter(Boolean).join(" · ");
+    const k = kratkoIme(m.ime), nal = S.naloge[m.id];
+    const kot = m.zaklep ? `<span class="kl">${ico.kljucavnica}</span>` : nal?.st ? `<span class="znacka" title="${esc(stevilo(nal.st, NALOGE))}">${nal.st}</span>` : "";
     return `<button class="box kid${ut(m.id)}" data-m="${esc(m.id)}">
-      <span class="av" style="--h:${odtenek(m.id)}">${esc(k.ime.charAt(0).toUpperCase())}</span>
-      <span class="kt"><b>${esc(k.ime)}</b>${meta ? `<small>${esc(meta)}</small>` : ""}</span>${m.zaklep ? `<span class="kl">${ico.kljucavnica}</span>` : ""}</button>`;
+      <span class="av" style="--h:${odtenek(m.id)}">${esc(k.ime.charAt(0).toUpperCase())}</span><b>${esc(k.ime)}</b>${kot}</button>`;
   };
-  const koren = (g) => `<button class="box grp-ime${ut(g.id)}" data-m="${esc(g.id)}"><b>${esc(g.ime)}</b>${g.zaklep ? `<span class="kl">${ico.kljucavnica}</span>` : ""}
-    <small>${g.otroci.length ? stevilo(g.otroci.length, g.otroci.every((c) => kratkoIme(c.ime).pod) ? ["stran", "strani", "strani", "strani"] : ["mapa", "mapi", "mape", "map"]) : "prazno"}</small>${ico.chev}</button>`;
-  const datum = new Date().toLocaleDateString("sl-SI", { weekday: "long", day: "numeric", month: "long" });
+  const koren = (g) => `<button class="box grp-ime${ut(g.id)}" data-m="${esc(g.id)}"><b>${esc(g.ime)}</b>${g.zaklep ? `<span class="kl">${ico.kljucavnica}</span>` : ""}${ico.chev}</button>`;
+  const glava = (ikona, naslov, desno = "") => `<div class="sek-h"><span class="sek-i">${ikona}</span><h2>${naslov}</h2>${desno}</div>`;
   view.className = "domov";
   view.innerHTML = `
   <div class="top"><div class="grow"><div class="znamka"><b><i>[</i>R<i>]</i>EMAKO<i class="pk">.</i></b><span>Studio</span></div></div><button class="iconbtn" id="nast" aria-label="Nastavitve">${ico.nast}</button></div>
-  <div class="top"><div class="grow"><div class="datum">${esc(datum)}</div><h1>${esc(pozdrav())}, <span class="grad">${esc(imeClana(jaz))}</span><span style="color:#ff2d55">.</span></h1></div></div>
+  <h1 class="pozdrav">${esc(pozdrav())}, <span class="grad">${esc(imeClana(jaz))}</span><span style="color:#ff2d55">.</span></h1>
   <div class="dom">
   <div class="dom-side">
-  <div class="d-moje">${mojeNaloge()}${zaPregled()}</div>
-  <div class="d-obj"><div class="h2row"><h2>Objave</h2><button id="vse">Vse</button></div>
-  <div class="next">${prih.length ? prih.slice(0, 3).map(vrsticaObjave).join("") : `<div class="empty">Ni načrtovanih objav.</div>`}</div></div>
+  <section class="sek sek-v d-moje">${mojeNaloge()}${zaPregled()}</section>
+  <section class="sek sek-p d-obj">${glava(ico.koledar, "Objave", `<button class="sek-vec" id="vse">${prih.length > 3 ? `Vse (${prih.length})` : "Vse"}</button>`)}
+  <div class="next">${prih.length ? prih.slice(0, 3).map(vrsticaObjave).join("") : `<div class="empty">Ni načrtovanih objav.</div>`}</div></section>
   </div>
-  <div class="map"><h2 class="map-h">Mape</h2>
+  <section class="sek sek-a map">${glava(ico.mapa, "Mape")}
     ${S.nalozeno ? drevo(S.mape).map((g) => `
-      <section class="grp">
+      <div class="grp">
         <div class="grp-h">${koren(g)}<button class="grp-plus" data-dodaj="${esc(g.id)}" aria-label="Dodaj mapo v ${esc(g.ime)}">${ico.plus}</button></div>
         <div class="kids">${g.otroci.map(otrok).join("")}${g.otroci.length ? "" : `<button class="plusbox" data-dodaj="${esc(g.id)}">+ Dodaj mapo</button>`}</div>
-      </section>`).join("") : `<div class="center"><div class="spin"></div></div>`}
+      </div>`).join("") : `<div class="center"><div class="spin"></div></div>`}
     <button class="addmap" id="addmap">+ Nova skupina</button>
-  </div>
+  </section>
   </div>
   <button class="fab" id="nova">${ico.plus}<span>Nova objava</span></button>`;
   $("nast").onclick = () => pojdi("nastavitve");
@@ -386,8 +385,8 @@ function renderDomov() {
 const mojePrikaz = { skrito: (() => { try { return localStorage.getItem("mojeSkrito") === "1"; } catch { return false; } })(), odprte: new Set(), vse: false };
 function mojeNaloge() {
   const moje = S.vseNaloge.filter((n) => nalogaZa(n, jaz) && mapa(n.mapa) && !zaklenjena(mapa(n.mapa)));
-  const prikaz = mojePrikaz.vse ? moje : moje.slice(0, 5);
-  return `<button class="h2row moje-glava" id="mojeG" aria-expanded="${!mojePrikaz.skrito}"><h2><span class="pika-oseba" style="--c:${barvaClana(jaz)}"></span>Moje naloge${moje.length ? ` <span class="st">${moje.length}</span>` : ""}</h2><span class="chev2">${ico.chev}</span></button>
+  const prikaz = mojePrikaz.vse ? moje : moje.slice(0, 3);
+  return `<button class="sek-h moje-glava" id="mojeG" aria-expanded="${!mojePrikaz.skrito}"><span class="sek-i">${ico.naloge}</span><h2>Moje naloge</h2>${moje.length ? `<span class="st">${moje.length}</span>` : ""}<span class="chev2">${ico.chev}</span></button>
   ${mojePrikaz.skrito ? "" : `<div class="list moje">${prikaz.length ? prikaz.map((n) => {
     const odprta = mojePrikaz.odprte.has(n.id), vec = String(n.besedilo).trim().includes("\n") || String(n.besedilo).length > 70;
     return `<div class="mn${odprta ? " odprta" : ""}" style="--c:${barvaClana(n.za)}">
@@ -395,7 +394,7 @@ function mojeNaloge() {
     <button class="mn-t" data-mo="${esc(n.id)}" title="${vec ? (odprta ? "Skrij" : "Pokaži vse") : ""}">${esc(odprta ? n.besedilo : prvaVrstica(n.besedilo))}${vec && !odprta ? " …" : ""}</button>
     <button class="mn-m" data-mm="${esc(n.mapa)}" title="Odpri mapo">${esc(kratkoIme(imeMape(n.mapa)).ime)}</button></div>`;
   }).join("") : `<div class="empty">Nimaš odprtih nalog.</div>`}
-    ${moje.length > 5 ? `<button class="mn-vec" id="mojeVec">${mojePrikaz.vse ? "Pokaži manj" : `Pokaži vse (${moje.length})`}</button>` : ""}</div>`}`;
+    ${moje.length > 3 ? `<button class="mn-vec" id="mojeVec">${mojePrikaz.vse ? "Pokaži manj" : `Še ${moje.length - 3}`}</button>` : ""}</div>`}`;
 }
 function vezMojeNaloge() {
   $("mojeG").onclick = () => {
@@ -422,12 +421,12 @@ const prvaVrstica = (t) => String(t).split("\n").map((x) => x.trim()).find(Boole
 function zaPregled() {
   const za = (S.zaPregled || []).filter((n) => mapa(n.mapa) && !zaklenjena(mapa(n.mapa)));
   if (!za.length) return "";
-  return `<h2 class="pregled-h">Za pregled <span class="st">${za.length}</span></h2><div class="list moje">${za.map((n) => {
+  return `<div class="pregled-h">Za pregled <span class="st">${za.length}</span></div><div class="list moje">${za.map((n) => {
     const odprta = mojePrikaz.odprte.has(n.id), vec = String(n.besedilo).trim().includes("\n") || String(n.besedilo).length > 70 || !!n.porocilo;
     return `<div class="mn${odprta ? " odprta" : ""}" style="--c:${barvaClana(n.narejenoKdo)}"><div class="mn-b">
     <button class="mn-t" data-mo="${esc(n.id)}">${esc(odprta ? n.besedilo : prvaVrstica(n.besedilo))}${vec && !odprta ? " …" : ""}</button>
     ${odprta && n.porocilo ? `<div class="porocilo">${esc(n.porocilo)}</div>` : ""}
-    <small><span class="oseba" style="--c:${barvaClana(n.narejenoKdo)}">${esc(imeClana(n.narejenoKdo))}</span>${esc(kdajBesedilo(n.narejenoOb))} · <button class="mn-mm" data-mm="${esc(n.mapa)}">${esc(kratkoIme(imeMape(n.mapa)).ime)}</button></small></div>
+    <small><span class="oseba" style="--c:${barvaClana(n.narejenoKdo)}">${esc(imeClana(n.narejenoKdo))}</span><button class="mn-mm" data-mm="${esc(n.mapa)}">${esc(kratkoIme(imeMape(n.mapa)).ime)}</button></small></div>
     <button class="pregledano" data-pr="${esc(n.mapa)}/${esc(n.id)}">Pregledano</button></div>`;
   }).join("")}</div>`;
 }
@@ -446,7 +445,6 @@ function vrsticaObjave(o) {
   return `<button class="obj${o.objavljeno ? " done" : ""}${zamuda ? " late" : ""}${n ? ` utripa ${n}` : ""}" data-o="${esc(o.id)}">
     <div class="when"><b>${esc(dan(o.kdaj))}</b>${ura(new Date(o.kdaj))}</div>
     <div class="what"><div>${esc(kratkoIme(imeMape(o.mapa)).ime)}</div><small>${esc(zaklenjena(mapa(o.mapa)) ? "Zaklenjena mapa" : o.opis || (o.objavljeno ? "Objavljeno" : `Objavi: ${imeClana(odgovoren(o))}`))}</small></div>
-    <div class="pl">${(o.platforme || []).map((p) => `<span>${p === "ig" ? "IG" : "TT"}</span>`).join("")}</div>
   </button>`;
 }
 // Objava iz zaklenjene mape se odpre šele, ko mapo odkleneš.
@@ -578,6 +576,7 @@ function urediObjavo(o = {}, privzeto = {}) {
 /* =================== MAPA =================== */
 function prijaviMapo(id) {
   odjaviMapo();
+  osnutek.odprt = false;
   osnutek.tn = osnutek.tz = osnutek.opombe = osnutek.ideje = osnutek.skripte = osnutek.skripteN = "";
   M.datoteke = []; M.gesla = []; M.opombe = []; M.ideje = []; M.skripte = []; M.naloge = []; M.nalozeno = false;
   mapaUnsub.push(onSnapshot(query(collection(db, "mape", id, "datoteke"), orderBy("ob", "desc")), (s) => {
@@ -934,10 +933,9 @@ function renderNaloge(el, m) {
   const odprte = M.naloge.filter((n) => !n.narejeno), narejene = M.naloge.filter((n) => n.narejeno);
   const vsota = (a) => a.reduce((s, n) => s + (n.strosek || 0), 0);
   const stanje = (n) => {
-    if (!n.narejeno) return `${oznakaZa(n)} ${esc(kdajBesedilo(n.ob))}`;
+    if (!n.narejeno) return oznakaZa(n);
     const kdo = n.narejenoKdo || n.uredil, pr = (n.pregledal || []).filter((e) => e !== kdo);
-    return `Opravljeno: <span class="oseba" style="--c:${barvaClana(kdo)}">${esc(imeClana(kdo))}</span>${n.narejenoOb ? esc(kdajBesedilo(n.narejenoOb)) : ""}
-      ${pr.length ? ` · <span class="ok">Pregledano: ${esc(pr.map(imeClana).join(", "))}</span>` : n.narejenoKdo ? ` · <span class="caka">Čaka pregled</span>` : ""}`;
+    return `<span class="oseba" style="--c:${barvaClana(kdo)}">${esc(imeClana(kdo))}</span>${pr.length ? `<span class="ok" title="${esc(pr.map(imeClana).join(", "))}">pregledano</span>` : n.narejenoKdo ? `<span class="caka">čaka pregled</span>` : ""}`;
   };
   const lahkoPregledam = (n) => n.narejeno && n.narejenoKdo && n.narejenoKdo !== jaz && !(n.pregledal || []).includes(jaz);
   const vrstica = (n) => `<div class="item naloga${n.narejeno ? " done" : ""}" style="--c:${barvaClana(n.narejeno ? n.narejenoKdo || n.za : n.za)}">
@@ -946,15 +944,19 @@ function renderNaloge(el, m) {
     ${lahkoPregledam(n) ? `<button class="pregledano" data-pr="${esc(m.id)}/${esc(n.id)}">Pregledano</button>` : ""}
     ${n.strosek ? `<span class="eur">${evri(n.strosek)}</span>` : ""}</div>`;
   if (osnutek.za === undefined) osnutek.za = jaz;
-  el.innerHTML = `<div class="dvo"><div class="dvo-l"><div class="opn">${izbiraZa("tza", osnutek.za)}<textarea id="tn" maxlength="2000" placeholder="Kaj je treba narediti?"></textarea>
-    <div class="row"><input id="tz" inputmode="decimal" placeholder="Strošek €"><button class="btn" id="tdd">Dodaj</button></div>
-    <button class="btn ghost full" id="tdn" title="Vpiši delo, ki si ga že opravil, da ga drugi pregledajo">Vpiši kot opravljeno</button></div>
-    ${vsota(M.naloge) ? `<div class="stroski"><div><small>Stroški skupaj</small><b>${evri(vsota(M.naloge))}</b></div><div><small>Še odprto</small><b>${evri(vsota(odprte))}</b></div></div>` : ""}</div>
+  el.innerHTML = `<div class="dvo"><div class="dvo-l"><div class="opn hitro${osnutek.odprt ? " odprt" : ""}">
+    <div class="vnos"><textarea id="tn" rows="1" maxlength="2000" placeholder="Nova naloga …"></textarea><button class="plusbtn" id="tdd" aria-label="Dodaj">${ico.plus}</button></div>
+    <div class="vec-moznosti">${izbiraZa("tza", osnutek.za)}
+    <div class="row"><input id="tz" inputmode="decimal" placeholder="Strošek €"><button class="btn ghost" id="tdn" title="Vpiši delo, ki si ga že opravil, da ga drugi pregledajo">Že opravljeno</button></div></div></div>
+    ${vsota(M.naloge) ? `<div class="stroski-v">Stroški <b>${evri(vsota(M.naloge))}</b><span>·</span>še odprto <b>${evri(vsota(odprte))}</b></div>` : ""}</div>
     <div class="dvo-r"><div class="list" style="margin-top:12px">${odprte.length ? odprte.map(vrstica).join("") : `<div class="empty">Ni odprtih nalog.</div>`}</div>
     ${narejene.length ? `<h2>Opravljeno</h2><div class="list">${narejene.map(vrstica).join("")}</div>` : ""}</div></div>`;
   // Kar je vpisano, ostane tudi, ko se seznam osveži.
   $("tn").value = osnutek.tn || ""; $("tz").value = osnutek.tz || "";
   $("tn").oninput = () => (osnutek.tn = $("tn").value); $("tz").oninput = () => (osnutek.tz = $("tz").value);
+  // Kdo, strošek in »Že opravljeno« se pokažejo šele, ko začneš pisati nalogo.
+  $("tn").onfocus = () => { osnutek.odprt = true; el.querySelector(".opn").classList.add("odprt"); };
+  $("tn").onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); dodaj(false); } };
   vezIzbiroZa("tza", (za) => (osnutek.za = za));
   const dodaj = (opravljeno) => {
     const besedilo = $("tn").value.trim();
