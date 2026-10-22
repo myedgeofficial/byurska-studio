@@ -16,6 +16,7 @@ esbuild.buildSync({
   nodePaths: [path.resolve(__dirname, "..", "node_modules")]
 });
 for (const f of ["index.html", "app.css", "ikona.png"]) fs.copyFileSync(path.join(web, f), path.join(out, f));
+fs.cpSync(path.join(web, "fonts"), path.join(out, "fonts"), { recursive: true });
 
 let cfg = process.env.STUDIO_FB_CONFIG || "";
 const file = path.resolve(__dirname, "..", "fb-config.json");
