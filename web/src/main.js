@@ -12,7 +12,7 @@ import {
 import { getStorage, ref, uploadBytesResumable, uploadBytes, getDownloadURL, deleteObject, connectStorageEmulator } from "firebase/storage";
 import {
   ZACETNI_CLANI, ZACETNE_MAPE, PLATFORME, platformeIme, drevo, dan, ura, pozdrav, kdajBesedilo, opomnikiZa, PRIVZETI_OPOMNIKI, opisOpomnikov,
-  vrstaDatoteke, velikost, veljavenEmail, nujnost, znesek, evri, kratkoIme, stevilo, ics, barvaClana, nalogaZa, odgovoren
+  vrstaDatoteke, velikost, veljavenEmail, nujnost, znesek, evri, kratkoIme, stevilo, ics, barvaClana, nalogaZa, odgovoren, vidiObjave
 } from "./data.js";
 import { novaSol, kljucIzGesla, zakleni, odkleni, preveritev, pravilen } from "./trezor.js";
 
@@ -222,7 +222,8 @@ async function zacni(u) {
     if (!S.mape.length && !s.metadata.fromCache) posejMape();
     S.nalozeno = true; osvezi();
   }, () => {}));
-  globalne.push(onSnapshot(query(collection(db, "objave"), where("kdaj", ">=", Date.now() - 30 * 864e5), orderBy("kdaj")), (s) => {
+  if (!vidiObjave(jaz)) { S.objave = []; planirajObvestila(); } // Teo objav ne vidi: pobriše tudi stare opomnike na telefonu
+  if (vidiObjave(jaz)) globalne.push(onSnapshot(query(collection(db, "objave"), where("kdaj", ">=", Date.now() - 30 * 864e5), orderBy("kdaj")), (s) => {
     S.objave = s.docs.map((d) => ({ id: d.id, ...d.data() }));
     planirajObvestila(); osvezi();
   }, () => {}));
@@ -349,8 +350,8 @@ function renderDomov() {
   <div class="dom">
   <div class="dom-side">
   <section class="sek sek-v d-moje">${mojeNaloge()}${zaPregled()}</section>
-  <section class="sek sek-p d-obj">${glava(ico.koledar, "Objave", `<button class="sek-vec" id="vse">${prih.length > 3 ? `Vse (${prih.length})` : "Vse"}</button>`)}
-  <div class="next">${prih.length ? prih.slice(0, 3).map(vrsticaObjave).join("") : `<div class="empty">Ni načrtovanih objav.</div>`}</div></section>
+  ${vidiObjave(jaz) ? `<section class="sek sek-p d-obj">${glava(ico.koledar, "Objave", `<button class="sek-vec" id="vse">${prih.length > 3 ? `Vse (${prih.length})` : "Vse"}</button>`)}
+  <div class="next">${prih.length ? prih.slice(0, 3).map(vrsticaObjave).join("") : `<div class="empty">Ni načrtovanih objav.</div>`}</div></section>` : ""}
   </div>
   <section class="sek sek-a map">${glava(ico.mapa, "Mape")}
     ${S.nalozeno ? drevo(S.mape).map((g) => `
@@ -361,12 +362,12 @@ function renderDomov() {
     <button class="addmap" id="addmap">+ Nova skupina</button>
   </section>
   </div>
-  <button class="fab" id="nova">${ico.plus}<span>Nova objava</span></button>`;
+  ${vidiObjave(jaz) ? `<button class="fab" id="nova">${ico.plus}<span>Nova objava</span></button>` : ""}`;
   $("nast").onclick = () => pojdi("nastavitve");
   $("addmap").onclick = () => urediMapo();
   view.querySelectorAll("[data-dodaj]").forEach((b) => (b.onclick = () => urediMapo(null, b.dataset.dodaj)));
-  $("nova").onclick = () => urediObjavo();
-  $("vse").onclick = () => pojdi("objave");
+  if ($("nova")) $("nova").onclick = () => urediObjavo();
+  if ($("vse")) $("vse").onclick = () => pojdi("objave");
   view.querySelectorAll(".box[data-m]").forEach((b) => {
     b.onclick = () => { if (b.dataset.dolg) return delete b.dataset.dolg; pojdi("mapa", { mapa: b.dataset.m }); };
     // Desni klik na računalniku ali dolg pritisk na telefonu odpre meni mape (zaklep, ime, podmapa, brisanje).
@@ -534,7 +535,7 @@ function urediObjavo(o = {}, privzeto = {}) {
       <div><label for="ou">Ura</label><input id="ou" type="time" value="${ura(kdaj)}"></div>
     </div>
     <label>Kdo objavi</label>
-    ${izbiraZa("okdo", odgovoren(o) || jaz, true)}
+    ${izbiraZa("okdo", odgovoren(o) || jaz, true, vidiObjave)}
     <label for="oo">Kaj objavimo <span class="muted">(ni obvezno)</span></label>
     <textarea id="oo" maxlength="500" placeholder="npr. Reel z novim izgledom, besedilo v opisu">${esc(o.opis || "")}</textarea>
     <p class="small muted">Opomnik: ${esc(opisOpomnikov(prefs.opomniki))}. Vsak si ga nastavi v Nastavitvah.</p>
@@ -617,7 +618,7 @@ function renderMapa() {
   if (!m) { view.innerHTML = `<div class="center"><div class="spin"></div></div>`; return; }
   if (zaklenjena(m)) return renderZaklenjenaMapa(m);
   const otroci = S.mape.filter((x) => x.oce === m.id).sort((a, b) => (a.red ?? 0) - (b.red ?? 0));
-  const SK = jeMapaGesel(m) ? SKUPINE_GESLA : SKUPINE;
+  const SK = jeMapaGesel(m) ? SKUPINE_GESLA : SKUPINE.filter((g) => g.k !== "objave" || vidiObjave(jaz));
   if (!SK.some((g) => g.deli.some(([k]) => k === pot.zavihek))) pot.zavihek = SK[0].deli[0][0];
   const z = pot.zavihek;
   // Samo nekaj glavnih zavihkov; sorodne stvari so združene pod enim (manjši preklop znotraj).
@@ -895,12 +896,12 @@ function pokaziDatoteko(id) {
     <label for="dcp">Caption</label><textarea id="dcp" maxlength="5000" placeholder="Besedilo objave za to sliko ali video">${esc(d.opis || "")}</textarea>
     <div class="row"><button class="btn ghost" id="dcs">Shrani caption</button><button class="btn ghost" id="dck">Kopiraj caption</button></div>
     <button class="btn" id="dd">${d.povezava ? "Odpri povezavo" : "Shrani ali deli"}</button>
-    <button class="btn ghost" id="dn">Načrtuj objavo s tem</button>
+    ${vidiObjave(jaz) ? `<button class="btn ghost" id="dn">Načrtuj objavo s tem</button>` : ""}
     <div class="row"><button class="btn ghost" id="dm">Premakni v ${druga === "urejeno" ? "Urejeno" : "Surovo"}</button><button class="btn danger" id="db">Izbriši</button></div>`, () => {
     $("dd").onclick = () => deli(d);
     $("dcs").onclick = () => { updateDoc(doc(db, "mape", pot.mapa, "datoteke", d.id), { opis: $("dcp").value.trim() }).then(() => toast("Caption shranjen")).catch(napaka); };
     $("dck").onclick = () => $("dcp").value.trim() ? kopiraj($("dcp").value.trim()) : toast("Caption je prazen.");
-    $("dn").onclick = () => urediObjavo({ opis: $("dcp").value.trim().slice(0, 500) }, { mapa: pot.mapa, datoteka: { id: d.id, ime: d.ime, url: d.url, tip: d.tip || "", slicica: d.slicica || null, povezava: !!d.povezava } });
+    if ($("dn")) $("dn").onclick = () => urediObjavo({ opis: $("dcp").value.trim().slice(0, 500) }, { mapa: pot.mapa, datoteka: { id: d.id, ime: d.ime, url: d.url, tip: d.tip || "", slicica: d.slicica || null, povezava: !!d.povezava } });
     $("dm").onclick = () => { updateDoc(doc(db, "mape", pot.mapa, "datoteke", d.id), { vrsta: druga }).catch(napaka); closeSheet(); };
     $("db").onclick = async () => {
       if (!confirm(`Izbrišem ${d.ime}?`)) return;
@@ -917,7 +918,7 @@ function pokaziDatoteko(id) {
 /* ---------- TO DO s stroški ---------- */
 // Člani ekipe za izbiro, komu je naloga (Teo, Urška, Nives in kdor je dodan).
 const claniEkipe = () => [...new Set([...Object.keys(ZACETNI_CLANI), ...Object.keys(S.clani)])];
-const izbiraZa = (id, izbran, brezVsi) => `<div class="chips za" id="${id}">${claniEkipe().map((e) =>
+const izbiraZa = (id, izbran, brezVsi, sme = () => true) => `<div class="chips za" id="${id}">${claniEkipe().filter(sme).map((e) =>
   `<button type="button" class="chip" data-za="${esc(e)}" style="--c:${barvaClana(e)}" aria-pressed="${izbran === e}">${esc(imeClana(e))}</button>`).join("")}
   ${brezVsi ? "" : `<button type="button" class="chip" data-za="" style="--c:#98a2b3" aria-pressed="${!izbran}">Vsi</button>`}</div>`;
 function vezIzbiroZa(id, ob) {
@@ -1161,7 +1162,7 @@ function renderNastavitve() {
     ${e !== jaz && !ZACETNI_CLANI[e] ? `<button class="link" data-odstrani="${esc(e)}">Odstrani</button>` : ""}</div>`).join("")}</div>
   <button class="btn ghost" id="dodaj">Dodaj člana</button>
   <p class="small muted">Novi član si v aplikaciji ustvari račun s to e-pošto. Za TestFlight ga mora Teo dodati še med testerje.</p>
-  <div ${native ? "" : "hidden"}>
+  <div ${native && vidiObjave(jaz) ? "" : "hidden"}>
   <h2>Moji opomniki za objave</h2>
   <div class="list" style="padding:4px 14px 14px">
     <label>Koliko prej</label>
@@ -1175,7 +1176,7 @@ function renderNastavitve() {
   <button class="btn ghost" id="obv">Vklopi obvestila</button>
   <p class="small muted">Nastavitve veljajo samo za tvoj telefon. Če obvestila ne pridejo, jih vklopi v Nastavitve › Obvestila › Remako Studio.</p>
   </div>
-  ${native ? "" : `<h2>Opomniki</h2><p class="small muted">Opomnike za objave dobiš na telefonu. Na računalniku objavo dodaš v koledar z gumbom V Koledar.</p>`}
+  ${native || !vidiObjave(jaz) ? "" : `<h2>Opomniki</h2><p class="small muted">Opomnike za objave dobiš na telefonu. Na računalniku objavo dodaš v koledar z gumbom V Koledar.</p>`}
   <h2>Gesla</h2>
   <button class="btn ghost" id="pozabi">Zakleni gesla na ${native ? "tem telefonu" : "tem računalniku"}</button>
   <button class="btn danger" id="odjava">Odjava</button>`;

@@ -58,6 +58,9 @@ export function nujnost(o, zdaj = Date.now()) {
   const razlika = Math.round((polnoc(new Date(o.kdaj)) - polnoc(new Date(zdaj))) / 864e5);
   return razlika <= 1 ? "rdeca" : razlika === 2 ? "oranzna" : "";
 }
+// Teo je tehnik: objav za družbena omrežja (seznam, utripanje, opomniki) ne vidi in jih ne dobi.
+export const BREZ_OBJAV = ["teo.simonic7@gmail.com"];
+export const vidiObjave = (email) => !BREZ_OBJAV.includes(String(email || "").toLowerCase());
 // Kdo mora objavo narediti: izbrana oseba (polje »kdo«), pri starih objavah tisti, ki jo je dodal.
 export const odgovoren = (o) => String(o?.kdo || o?.dodal || "").toLowerCase();
 // Termin potisnega obvestila za utripajoče objave: dvakrat na dan, zjutraj od 9:00 in zvečer od 18:00.
