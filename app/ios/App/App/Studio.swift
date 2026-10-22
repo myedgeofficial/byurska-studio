@@ -8,6 +8,10 @@ import Security
 
 // Domači del aplikacije: koledar, opomniki, obvestila na telefonu, deljenje vsebine in varna shramba ključa za gesla.
 
+extension Notification.Name {
+    static let studioPushZeton = Notification.Name("studioPushZeton")
+}
+
 class MainViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(StudioPlugin())
@@ -23,6 +27,7 @@ public class StudioPlugin: CAPPlugin, CAPBridgedPlugin, EKEventEditViewDelegate 
         CAPPluginMethod(name: "opomnik", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "dovoljenje", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "obvestila", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "pushZeton", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "deli", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "kljucPreberi", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "kljucShrani", returnType: CAPPluginReturnPromise)
@@ -110,6 +115,23 @@ public class StudioPlugin: CAPPlugin, CAPBridgedPlugin, EKEventEditViewDelegate 
     @objc func dovoljenje(_ call: CAPPluginCall) {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { ok, _ in
             call.resolve(["dovoljeno": ok])
+        }
+    }
+
+    // Žeton za potisna obvestila (strežnik opomni odgovorno osebo, ko objava utripa).
+    private var zetonOpazovalec: NSObjectProtocol?
+
+    @objc func pushZeton(_ call: CAPPluginCall) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in
+            DispatchQueue.main.async {
+                if let o = self.zetonOpazovalec { NotificationCenter.default.removeObserver(o) }
+                self.zetonOpazovalec = NotificationCenter.default.addObserver(forName: .studioPushZeton, object: nil, queue: .main) { n in
+                    if let o = self.zetonOpazovalec { NotificationCenter.default.removeObserver(o) }
+                    self.zetonOpazovalec = nil
+                    if let t = n.object as? String { call.resolve(["zeton": t]) } else { call.resolve([:]) }
+                }
+                UIApplication.shared.registerForRemoteNotifications()
+            }
         }
     }
 

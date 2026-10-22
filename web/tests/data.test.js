@@ -112,3 +112,13 @@ test("pozdrav glede na uro", () => {
   assert.equal(ob(20), "Dober večer");
   assert.equal(ob(2), "Dober večer");
 });
+
+test("odgovoren za objavo in termin potisnega obvestila", async () => {
+  const { odgovoren, terminOpomnika } = await import("../src/data.js");
+  assert.equal(odgovoren({ kdo: "Nives.Ploj@gmail.com", dodal: "teo.simonic7@gmail.com" }), "nives.ploj@gmail.com");
+  assert.equal(odgovoren({ dodal: "teo.simonic7@gmail.com" }), "teo.simonic7@gmail.com");
+  assert.equal(terminOpomnika(new Date(2026, 9, 22, 8, 59).getTime()), "");
+  assert.equal(terminOpomnika(new Date(2026, 9, 22, 9, 10).getTime()), "2026-10-22 jutro");
+  assert.equal(terminOpomnika(new Date(2026, 9, 22, 17, 10).getTime()), "2026-10-22 jutro");
+  assert.equal(terminOpomnika(new Date(2026, 9, 22, 18, 5).getTime()), "2026-10-22 vecer");
+});

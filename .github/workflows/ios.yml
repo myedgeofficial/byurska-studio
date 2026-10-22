@@ -6,7 +6,7 @@ on:
   pull_request:
   push:
     branches: [main]
-    paths-ignore: ["firebase/**", ".github/workflows/firebase.yml", ".github/workflows/testerji.yml", ".github/workflows/nove-aplikacije.yml", ".github/workflows/splet.yml", ".github/scripts/**", "README.md"]
+    paths-ignore: ["firebase/**", ".github/workflows/firebase.yml", ".github/workflows/testerji.yml", ".github/workflows/nove-aplikacije.yml", ".github/workflows/opomniki.yml", ".github/workflows/splet.yml", ".github/scripts/**", "README.md"]
   workflow_dispatch:
 
 concurrency:
@@ -100,6 +100,14 @@ jobs:
             DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic CODE_SIGNING_ALLOWED=NO \
             STUDIO_BUNDLE_ID="$BUNDLE_ID" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             archive | tail -n 80
+
+          # Nepodpisan arhiv nima pravice za obvestila: aplikacijo podpišemo lokalno s pravicami,
+          # izvoz jih prenese v pravi podpis za App Store.
+          APP="$RUNNER_TEMP/Byurska.xcarchive/Products/Applications/App.app"
+          for n in "$APP"/Frameworks/*.framework "$APP"/Frameworks/*.dylib; do
+            [ -e "$n" ] && codesign --force --sign - "$n" || true
+          done
+          codesign --force --sign - --entitlements App/App.entitlements --generate-entitlement-der "$APP" || echo "::warning::Ad-hoc podpis ni uspel"
 
           xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Byurska.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
