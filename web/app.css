@@ -442,3 +442,33 @@ input[type="date"], input[type="time"] { min-height: 48px; }
 .komu-o .pika-oseba { width: 14px; height: 14px; border-radius: 50%; background: var(--c); flex: none; }
 .komu-o small { font-weight: 400; opacity: .6; }
 .komu-o:active { background: color-mix(in srgb, var(--c) 20%, transparent); border-color: var(--c); }
+
+/* Mape kot seznam: vsaka skupina je kartica z vrsticami, skupino lahko zložiš */
+.map .grp { margin: 0 0 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; box-shadow: var(--shadow); }
+.map .grp-h { display: flex; align-items: center; gap: 0; margin: 0; }
+.grp-tog { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 13px 4px 13px 14px; text-align: left; color: var(--text); -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.grp-tog .pika { flex: none; width: 10px; height: 10px; border-radius: 5px; background: rgb(var(--gc)); }
+.grp-tog b { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; }
+.grp-tog small { color: var(--dim); font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.grp-tog .znacka, .vr .znacka { position: static; margin-left: auto; flex: none; }
+.grp-tog .kl { margin-left: 2px; }
+.grp-tog.utripa-pika .pika { animation: utripc 1.4s ease-in-out infinite; }
+.map .grp-h .grp-plus { margin: 0; width: 36px; height: 44px; border: 0; color: var(--dim); }
+.grp-chev { flex: none; width: 36px; height: 44px; margin-right: 6px; display: grid; place-items: center; color: var(--dim); }
+.grp-chev .chev { transform: rotate(90deg); transition: transform .15s; }
+.zlozena .grp-chev .chev { transform: none; }
+.vrste { display: flex; flex-direction: column; }
+.box.vr { gap: 12px; padding: 9px 12px 9px 14px; min-height: 50px; border: 0; border-top: 1px solid rgba(255, 255, 255, .06); border-radius: 0; box-shadow: none; background: transparent; }
+.box.vr:active { transform: none; background: rgba(255, 255, 255, .04); }
+.vr .av { flex: none; width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; font-size: 15px; font-weight: 800;
+  background: hsl(var(--h) 60% 60% / .16); color: hsl(var(--h) 85% 78%); }
+.vr .av.em { background: rgba(var(--gc), .14); font-size: 17px; font-weight: 400; }
+.vr > b { flex: 1; min-width: 0; font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vr .kl { margin-left: auto; }
+.vr > .chev { flex: none; color: #4f4866; width: 14px; height: 14px; }
+.vr .znacka + .chev, .vr .kl + .chev { margin-left: 0; }
+.vrste .box.vr.utripa { border: 0; border-top: 1px solid rgba(255, 255, 255, .06); box-shadow: inset 4px 0 0 rgb(var(--utrip)); padding: 9px 12px 9px 14px; animation: utripv 1.4s ease-in-out infinite; }
+@keyframes utripv { 50% { background-color: rgba(var(--utrip), .12); } }
+.vrste .plusbox { margin: 8px 12px 12px; width: auto; }
+.map .grp-tog .znacka { background: rgba(139, 92, 246, .9); color: #fff; }
+@media (min-width: 1100px) { .dom .map { grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); } }

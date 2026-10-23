@@ -159,6 +159,25 @@ export function kratkoIme(ime = "") {
   return { ime: m[1].charAt(0).toUpperCase() + m[1].slice(1), pod: m[2].toLowerCase() };
 }
 
+// Ikona mape v seznamu: ročno izbrana (m.ikona), sicer uganjena po imenu; "" = prva črka.
+const IKONE = [
+  [/spirit|duhov|medit/i, "🕊️"], [/art\b|umetn|slik/i, "🎨"], [/climb|pleza/i, "🧗"], [/financ|denar|računi/i, "💶"], [/poet|poezij|pesm/i, "✒️"],
+  [/nakupko web|\bweb\b|splet/i, "🌐"], [/nakupko|nakup|trgovin/i, "🛒"], [/popravko|fixko|mojster/i, "🔧"], [/manifest|lumora/i, "✨"], [/sentinel/i, "🛡️"],
+  [/ars ?sana|zdrav/i, "🌿"], [/remako|studio/i, "🎬"], [/mail|pošt|e-?pošt/i, "✉️"], [/blagovn|znamk|brand/i, "™️"], [/strošk|stroski|plačil/i, "💸"],
+  [/gesl|passw|dostop/i, "🔒"], [/^to ?do\b|naloge/i, "✅"], [/objav|instagram|tiktok/i, "📣"], [/ideje|idej/i, "💡"],
+];
+export function ikonaMape(m = {}) {
+  if (m.ikona) return String(m.ikona);
+  const ime = kratkoIme(m.ime).ime;
+  return IKONE.find(([r]) => r.test(ime))?.[1] || "";
+}
+
+// »TO DO TEO« → "Teo" (mape z nalogami posameznika se v seznamu zberejo v svojo skupino »TO DO«); sicer "".
+export function todoOseba(ime = "") {
+  const m = /^to\s?-?do\s+(.+)$/i.exec(String(ime).trim());
+  return m ? m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase() : "";
+}
+
 // 1 naloga, 2 nalogi, 3 naloge, 5 nalog (slovenska dvojina).
 export function stevilo(n, [ena, dve, tri, pet]) {
   const d = n % 100;

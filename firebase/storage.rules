@@ -8,6 +8,11 @@ service firebase.storage {
         && (request.auth.token.email.lower() in ['teo.simonic7@gmail.com', 'urska.repusic@gmail.com', 'nives.ploj@gmail.com', 'andjela.collab@gmail.com']
             || firestore.exists(/databases/(default)/documents/clani/$(request.auth.token.email.lower())));
     }
+    // Datoteke iz Moje mape vidi samo lastnik.
+    match /zasebno/{lastnik}/{vse=**} {
+      allow read, delete: if clan() && request.auth.token.email.lower() == lastnik;
+      allow create, update: if clan() && request.auth.token.email.lower() == lastnik && request.resource.size < 5 * 1024 * 1024 * 1024;
+    }
     match /mape/{vse=**} {
       allow read, delete: if clan();
       allow create, update: if clan() && request.resource.size < 5 * 1024 * 1024 * 1024;

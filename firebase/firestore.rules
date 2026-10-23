@@ -20,8 +20,9 @@ service cloud.firestore {
     match /{pot=**}/naloge/{id} {
       allow read: if clan();
     }
-    // Moja mapa: vsak vidi in ureja samo svoje zapiske.
-    match /zasebno/{lastnik}/zapiski/{id} {
+    // Moja mapa: vsak vidi in ureja samo svojo (vsebina, naloge, opombe, gesla ...).
+    // Naloge so tu v »moje-naloge«, zato jih skupni pregled nalog (collectionGroup »naloge«) ne zajame.
+    match /zasebno/{lastnik}/{pot=**} {
       allow read, write: if clan() && email() == lastnik;
     }
   }
