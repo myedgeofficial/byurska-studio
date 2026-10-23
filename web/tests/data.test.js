@@ -122,3 +122,27 @@ test("odgovoren za objavo in termin potisnega obvestila", async () => {
   assert.equal(terminOpomnika(new Date(2026, 9, 22, 17, 10).getTime()), "2026-10-22 jutro");
   assert.equal(terminOpomnika(new Date(2026, 9, 22, 18, 5).getTime()), "2026-10-22 vecer");
 });
+
+test("obvestilo o novi ali dodeljeni nalogi", async () => {
+  const { prejemnikiNaloge } = await import("../src/data.js");
+  const U = "urska.repusic@gmail.com", A = "andjela.collab@gmail.com";
+  assert.equal(prejemnikiNaloge(null, { za: A, dodal: U }), A);
+  assert.equal(prejemnikiNaloge(null, { za: U, dodal: U }), "");
+  assert.equal(prejemnikiNaloge(null, { za: "", dodal: U }), "vsi");
+  assert.equal(prejemnikiNaloge(null, { za: A, dodal: U, narejeno: true }), "");
+  assert.equal(prejemnikiNaloge({ za: A, dodal: U }, { za: A, dodal: U, uredil: U, besedilo: "nov" }), "");
+  assert.equal(prejemnikiNaloge({ za: U, dodal: U }, { za: A, dodal: U, uredil: U }), A);
+  assert.equal(prejemnikiNaloge({ za: A, dodal: U }, { za: A, dodal: U, narejeno: true }), "");
+  assert.equal(prejemnikiNaloge({ za: A }, null), "");
+});
+
+test("opomnik, izbran pri objavi", async () => {
+  const { opisOpomni } = await import("../src/data.js");
+  const kdaj = new Date(2026, 9, 25, 18, 0).getTime(), zdaj = new Date(2026, 9, 23, 12).getTime();
+  const r = opomnikiZa({ id: "a", kdaj, platforme: ["ig", "fb"], opomni: [0, 120, 1440] }, "Art", zdaj);
+  assert.deepEqual(r.map((x) => x.naslov), ["Jutri objava", "Čez 2 uri objava", "Čas za objavo"]);
+  assert.equal(r[1].kdaj, kdaj - 120 * 60e3);
+  assert.match(r[0].besedilo, /Art na Instagram \+ Facebook/);
+  assert.deepEqual(opomnikiZa({ id: "a", kdaj, opomni: [] }, "Art", zdaj), []);
+  assert.equal(opisOpomni([60, 1440]), "1 dan prej, 1 uro prej");
+});

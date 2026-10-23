@@ -11,7 +11,7 @@ import {
 } from "firebase/firestore";
 import { getStorage, ref, uploadBytesResumable, uploadBytes, getDownloadURL, deleteObject, connectStorageEmulator } from "firebase/storage";
 import {
-  ZACETNI_CLANI, ZACETNE_MAPE, PLATFORME, platformeIme, drevo, dan, ura, pozdrav, kdajBesedilo, opomnikiZa, PRIVZETI_OPOMNIKI, opisOpomnikov,
+  ZACETNI_CLANI, ZACETNE_MAPE, PLATFORME, platformeIme, drevo, dan, ura, pozdrav, kdajBesedilo, opomnikiZa, PRIVZETI_OPOMNIKI, opisOpomnikov, OPOMNI_PRI_OBJAVI, PRIVZETO_OPOMNI, opisOpomni,
   vrstaDatoteke, velikost, veljavenEmail, nujnost, znesek, evri, kratkoIme, stevilo, ics, barvaClana, nalogaZa, odgovoren, vidiObjave
 } from "./data.js";
 import { novaSol, kljucIzGesla, zakleni, odkleni, preveritev, pravilen } from "./trezor.js";
@@ -103,7 +103,7 @@ function initFb() {
 }
 
 /* ---------- stanje ---------- */
-const S = { mape: [], objave: [], naloge: {}, vseNaloge: [], clani: {}, trezor: undefined, kljuc: null, kljucOk: false, nalozeno: false };
+const S = { mape: [], objave: [], naloge: {}, vseNaloge: [], clani: {}, moje: [], trezor: undefined, kljuc: null, kljucOk: false, nalozeno: false };
 const pot = { zaslon: "domov", mapa: null, zavihek: "todo" };
 const zgod = [];
 const globalne = [];
@@ -248,6 +248,11 @@ async function zacni(u) {
     S.clani = Object.fromEntries(s.docs.map((d) => [d.id, d.data()]));
     if (pot.zaslon === "nastavitve") osvezi();
   }, () => {}));
+  // Moja mapa: osebni zapiski, ki jih vidi samo lastnik (tudi pravila v bazi).
+  globalne.push(onSnapshot(query(collection(db, "zasebno", jaz, "zapiski"), orderBy("ob", "desc")), (s) => {
+    S.moje = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+    if (pot.zaslon === "domov" || pot.zaslon === "moja") osvezi();
+  }, () => {}));
   globalne.push(onSnapshot(doc(db, "nastavitve", "trezor"), async (s) => {
     S.trezor = s.exists() ? s.data() : null;
     S.kljucOk = !!(S.trezor && S.kljuc && await pravilen(S.kljuc, S.trezor.preveri));
@@ -282,7 +287,9 @@ function planirajObvestila() {
   if (!native) return;
   clearTimeout(planT);
   planT = setTimeout(() => {
-    const seznam = S.objave.flatMap((o) => opomnikiZa(o, imeMape(o.mapa), Date.now(), prefs.opomniki)).sort((a, b) => a.kdaj - b.kdaj).slice(0, 60);
+    // Opomnik, izbran pri objavi, dobita samo tisti, ki objavi, in tisti, ki jo je dodal.
+    const zame = (o) => !Array.isArray(o.opomni) || odgovoren(o) === jaz || o.dodal === jaz;
+    const seznam = S.objave.filter(zame).flatMap((o) => opomnikiZa(o, imeMape(o.mapa), Date.now(), prefs.opomniki)).sort((a, b) => a.kdaj - b.kdaj).slice(0, 60);
     Studio.obvestila({ seznam }).catch(() => {});
   }, 400);
 }
@@ -312,7 +319,7 @@ function osvezi() {
   const f = document.activeElement, fid = f && view.contains(f) && f.id, sel = fid && "selectionStart" in f ? [f.selectionStart, f.selectionEnd] : null;
   // Tudi vpisano besedilo (npr. geslo mape) ostane, če se zaslon vmes osveži zaradi sprememb drugih.
   const vpisano = [...view.querySelectorAll("input[id], textarea[id]")].filter((x) => x.type !== "file" && x.value).map((x) => [x.id, x.value]);
-  ({ domov: renderDomov, mapa: renderMapa, objave: renderObjave, nastavitve: renderNastavitve })[pot.zaslon]();
+  ({ domov: renderDomov, mapa: renderMapa, objave: renderObjave, nastavitve: renderNastavitve, moja: renderMoja })[pot.zaslon]();
   for (const [id, v] of vpisano) { const x = document.getElementById(id); if (x && view.contains(x) && !x.value && x.type !== "file") x.value = v; }
   const n = fid && document.getElementById(fid);
   if (n && n !== document.activeElement && /^(INPUT|TEXTAREA)$/.test(n.tagName)) { n.focus({ preventScroll: true }); if (sel) try { n.setSelectionRange(...sel); } catch {} }
@@ -352,6 +359,7 @@ function renderDomov() {
   <section class="sek sek-v d-moje">${mojeNaloge()}${zaPregled()}</section>
   ${vidiObjave(jaz) ? `<section class="sek sek-p d-obj">${glava(ico.koledar, "Objave", `<button class="sek-vec" id="vse">${prih.length > 3 ? `Vse (${prih.length})` : "Vse"}</button>`)}
   <div class="next">${prih.length ? prih.slice(0, 3).map(vrsticaObjave).join("") : `<div class="empty">Ni načrtovanih objav.</div>`}</div></section>` : ""}
+  <section class="sek sek-z d-moja"><button class="sek-h moja-glava" id="moja"><span class="sek-i">${ico.kljucavnica}</span><h2>Moja mapa</h2>${S.moje.length ? `<span class="st">${S.moje.length}</span>` : ""}<small>samo zate</small>${ico.chev}</button></section>
   </div>
   <section class="sek sek-a map">${glava(ico.mapa, "Mape")}
     ${S.nalozeno ? drevo(S.mape).map((g) => `
@@ -364,6 +372,7 @@ function renderDomov() {
   </div>
   ${vidiObjave(jaz) ? `<button class="fab" id="nova">${ico.plus}<span>Nova objava</span></button>` : ""}`;
   $("nast").onclick = () => pojdi("nastavitve");
+  $("moja").onclick = () => pojdi("moja");
   $("addmap").onclick = () => urediMapo();
   view.querySelectorAll("[data-dodaj]").forEach((b) => (b.onclick = () => urediMapo(null, b.dataset.dodaj)));
   if ($("nova")) $("nova").onclick = () => urediObjavo();
@@ -480,7 +489,7 @@ function pokaziObjavo(id) {
     <p>${esc(kdajBesedilo(o.kdaj))}</p>
     ${o.opis ? `<p class="sel muted">${esc(o.opis)}</p>` : ""}
     ${d ? `<div class="preview">${predogled(d)}</div><button class="btn ghost" id="deli">Shrani ali deli vsebino</button>` : ""}
-    <p class="small muted">Objavi: <span class="oseba" style="--c:${barvaClana(odgovoren(o))}">${esc(imeClana(odgovoren(o)))}</span>${o.objavljeno ? "" : " (dobi opomnik na telefon dvakrat na dan, ko objava utripa)"}. Tvoji opomniki: ${esc(opisOpomnikov(prefs.opomniki))}. Dodano: ${esc(imeClana(o.dodal))}.</p>
+    <p class="small muted">Objavi: <span class="oseba" style="--c:${barvaClana(odgovoren(o))}">${esc(imeClana(odgovoren(o)))}</span>${o.objavljeno ? "" : " (dobi opomnik na telefon dvakrat na dan, ko objava utripa)"}. Opomnik: ${esc(Array.isArray(o.opomni) ? opisOpomni(o.opomni) : opisOpomnikov(prefs.opomniki))}. Dodano: ${esc(imeClana(o.dodal))}.</p>
     <div class="row"><button class="btn ghost" id="kol">V Koledar</button>${native ? `<button class="btn ghost" id="opo">V Opomnike</button>` : ""}</div>
     <button class="btn" id="obj">${o.objavljeno ? "Ni še objavljeno" : "Označi kot objavljeno"}</button>
     <div class="row"><button class="btn ghost" id="ured">Uredi</button><button class="btn danger" id="brisi">Izbriši</button></div>`, () => {
@@ -522,23 +531,27 @@ function urediObjavo(o = {}, privzeto = {}) {
   const st = {
     mapa: o.mapa || privzeto.mapa || (pot.zaslon === "mapa" ? pot.mapa : S.mape[0]?.id),
     platforme: [...(o.platforme || ["ig"])],
+    opomni: [...(Array.isArray(o.opomni) ? o.opomni : PRIVZETO_OPOMNI)],
     datoteka: o.datoteka || privzeto.datoteka || null
   };
   openSheet(`
     <h3>${o.id ? "Uredi objavo" : "Nova objava"}</h3>
     <label for="om">Mapa</label>
     <select id="om">${izbiraMap(st.mapa)}</select>
-    <label>Kam</label>
+    <label>1. Kam objavimo</label>
     <div class="chips" id="op">${PLATFORME.map(([k, n]) => `<button type="button" class="chip" data-k="${k}" aria-pressed="${st.platforme.includes(k)}">${n}</button>`).join("")}</div>
+    <label>2. Kdaj mora biti objavljeno</label>
     <div class="row">
-      <div><label for="od">Dan</label><input id="od" type="date" value="${vDatum(kdaj)}"></div>
-      <div><label for="ou">Ura</label><input id="ou" type="time" value="${ura(kdaj)}"></div>
+      <div><input id="od" type="date" value="${vDatum(kdaj)}" aria-label="Dan"></div>
+      <div><input id="ou" type="time" value="${ura(kdaj)}" aria-label="Ura"></div>
     </div>
-    <label>Kdo objavi</label>
+    <label>3. Kdaj te app opomni</label>
+    <div class="chips" id="oopo">${OPOMNI_PRI_OBJAVI.map(([k, n]) => `<button type="button" class="chip" data-k="${k}" aria-pressed="${st.opomni.includes(k)}">${n}</button>`).join("")}</div>
+    <label>4. Kdo objavi</label>
     ${izbiraZa("okdo", odgovoren(o) || jaz, true, vidiObjave)}
     <label for="oo">Kaj objavimo <span class="muted">(ni obvezno)</span></label>
     <textarea id="oo" maxlength="500" placeholder="npr. Reel z novim izgledom, besedilo v opisu">${esc(o.opis || "")}</textarea>
-    <p class="small muted">Opomnik: ${esc(opisOpomnikov(prefs.opomniki))}. Vsak si ga nastavi v Nastavitvah.</p>
+    <p class="small muted">Opomnik pride na telefon tistemu, ki objavi. Ko objava utripa, ga app opomni še ob 9:00 in 18:00, dokler je ne označi kot objavljeno.</p>
     <div id="odat"></div>
     <div class="err" id="oerr" hidden></div>
     <button class="btn" id="oshrani">Shrani</button>`, (box) => {
@@ -553,16 +566,17 @@ function urediObjavo(o = {}, privzeto = {}) {
       c.setAttribute("aria-pressed", arr.includes(k));
     }));
     tog("#op", st.platforme, false);
+    tog("#oopo", st.opomni, true);
     vezIzbiroZa("okdo", () => {});
     $("oshrani").onclick = async () => {
       const [y, m, d] = $("od").value.split("-").map(Number);
       const [h, mi] = ($("ou").value || "18:00").split(":").map(Number);
       const err = (t) => { $("oerr").hidden = false; $("oerr").textContent = t; };
       if (!y) return err("Izberi dan.");
-      if (!st.platforme.length) return err("Izberi Instagram ali TikTok.");
+      if (!st.platforme.length) return err("Izberi, kam objavimo.");
       const data = {
         mapa: $("om").value, platforme: st.platforme, kdaj: new Date(y, m - 1, d, h || 0, mi || 0).getTime(),
-        opis: $("oo").value.trim(), datoteka: st.datoteka || null, kdo: izbranZa("okdo") || jaz
+        opis: $("oo").value.trim(), datoteka: st.datoteka || null, kdo: izbranZa("okdo") || jaz, opomni: st.opomni
       };
       $("oshrani").disabled = true;
       try {
@@ -1062,6 +1076,48 @@ function urediZapisek(m, vrsta, o) {
       deleteDoc(doc(db, "mape", m.id, vrsta, o.id)).catch(napaka); closeSheet();
     };
   });
+}
+
+/* =================== MOJA MAPA (vidi jo samo lastnik) =================== */
+function renderMoja() {
+  view.className = "";
+  view.innerHTML = `
+  <div class="top"><button class="iconbtn" id="nazaj" aria-label="Nazaj">${ico.nazaj}</button><div class="grow"><h1>Moja mapa</h1></div></div>
+  <p class="small muted moja-opis">${ico.kljucavnica} Vidiš samo ti. Nihče drug iz ekipe tega ne vidi.</p>
+  <div class="dvo"><div class="dvo-l"><div class="opn">
+    <textarea id="mz" maxlength="20000" placeholder="Zapiši karkoli zase ..."></textarea>
+    <button class="btn" id="ms">Shrani</button></div></div>
+    <div class="dvo-r"><div class="list" style="margin-top:14px">${S.moje.length ? S.moje.map((o) => `<button class="item opomba" data-n="${esc(o.id)}"><div class="grow">
+      <div class="ob">${esc(o.besedilo)}</div><small>${esc(kdajBesedilo(o.ob))}</small></div></button>`).join("")
+      : `<div class="empty">Tvoji zapiski, ideje, seznami ...</div>`}</div></div></div>`;
+  $("nazaj").onclick = nazaj;
+  $("mz").value = osnutek.moja || "";
+  $("mz").oninput = () => (osnutek.moja = $("mz").value);
+  $("ms").onclick = () => {
+    const besedilo = $("mz").value.trim();
+    if (!besedilo) return toast("Najprej kaj napiši.");
+    $("mz").value = ""; osnutek.moja = "";
+    addDoc(collection(db, "zasebno", jaz, "zapiski"), { besedilo, ob: Date.now() }).catch(napaka);
+  };
+  view.querySelectorAll(".item[data-n]").forEach((b) => (b.onclick = () => {
+    const o = S.moje.find((x) => x.id === b.dataset.n);
+    if (!o) return;
+    openSheet(`<h3>Moj zapisek</h3>
+      <textarea id="me" maxlength="20000" style="min-height:220px">${esc(o.besedilo)}</textarea>
+      <button class="btn ghost" id="mk">Kopiraj besedilo</button>
+      <div class="row"><button class="btn" id="mse">Shrani</button><button class="btn danger" id="mb">Izbriši</button></div>`, () => {
+      $("mk").onclick = () => kopiraj($("me").value);
+      $("mse").onclick = () => {
+        const besedilo = $("me").value.trim();
+        if (!besedilo) return toast("Prazno.");
+        updateDoc(doc(db, "zasebno", jaz, "zapiski", o.id), { besedilo, ob: Date.now() }).catch(napaka); closeSheet();
+      };
+      $("mb").onclick = () => {
+        if (!confirm("Izbrišem zapisek?")) return;
+        deleteDoc(doc(db, "zasebno", jaz, "zapiski", o.id)).catch(napaka); closeSheet();
+      };
+    });
+  }));
 }
 
 /* ---------- gesla in pomembne informacije ---------- */

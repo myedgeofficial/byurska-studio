@@ -1,7 +1,7 @@
 // Podatki in pomožne funkcije brez odvisnosti (preizkušene z node --test).
 
 // Kdo ima dostop od začetka. Ostale (npr. Nives) dodaš v aplikaciji pod Nastavitve › Ekipa.
-export const ZACETNI_CLANI = { "teo.simonic7@gmail.com": "Teo", "urska.repusic@gmail.com": "Urška", "nives.ploj@gmail.com": "Nives" };
+export const ZACETNI_CLANI = { "teo.simonic7@gmail.com": "Teo", "urska.repusic@gmail.com": "Urška", "nives.ploj@gmail.com": "Nives", "andjela.collab@gmail.com": "Andjela" };
 
 // Mape kot na skici: Byurska.com s podstranmi in Apps z aplikacijami.
 export const ZACETNE_MAPE = [
@@ -17,13 +17,22 @@ export const ZACETNE_MAPE = [
   { id: "sentinel", ime: "Sentinel", oce: "apps", red: 13 }
 ];
 
-// Barve članov za naloge: Teo neon zelena, Nives modra, Urška roza; ostali sivi.
-export const BARVE_CLANOV = { "teo.simonic7@gmail.com": "#39ff14", "nives.ploj@gmail.com": "#2e7cf6", "urska.repusic@gmail.com": "#e2459b" };
+// Barve članov za naloge: Teo neon zelena, Nives modra, Urška roza, Andjela oranžna; ostali sivi.
+export const BARVE_CLANOV = { "teo.simonic7@gmail.com": "#39ff14", "nives.ploj@gmail.com": "#2e7cf6", "urska.repusic@gmail.com": "#e2459b", "andjela.collab@gmail.com": "#ff9f0a" };
 export const barvaClana = (e) => BARVE_CLANOV[String(e || "").toLowerCase()] || "#98a2b3";
 // Komu je naloga: polje »za« (e-pošta) ali prazno = vsem. Stare naloge brez polja so za vse.
 export const nalogaZa = (n, email) => !n.za || n.za === String(email || "").toLowerCase();
+// Komu poslati obvestilo o nalogi: e-pošta, »vsi« (naloga za vse, razen avtorju) ali "" (nikomur).
+// Ob novi neopravljeni nalogi in ko se naloga dodeli drugi osebi; ne obvestimo tistega, ki si jo je dodelil sam.
+export function prejemnikiNaloge(prej, zdaj) {
+  if (!zdaj || zdaj.narejeno) return "";
+  const za = String(zdaj.za || "").toLowerCase(), avtor = String((prej ? zdaj.uredil : zdaj.dodal) || zdaj.dodal || "").toLowerCase();
+  if (prej && String(prej.za || "").toLowerCase() === za) return "";
+  if (!za) return "vsi";
+  return za === avtor ? "" : za;
+}
 
-export const PLATFORME = [["ig", "Instagram"], ["tiktok", "TikTok"]];
+export const PLATFORME = [["ig", "Instagram"], ["fb", "Facebook"], ["tiktok", "TikTok"]];
 export const platformeIme = (p = []) => PLATFORME.filter(([k]) => p.includes(k)).map(([, n]) => n).join(" + ") || "Objava";
 
 // Drevo map: korenske mape po vrstnem redu, vsaka s svojimi podmapami.
@@ -74,11 +83,22 @@ export const kdajBesedilo = (ms, zdaj) => `${dan(ms, zdaj)} ob ${ura(new Date(ms
 // Vsak si sam nastavi, kdaj ga telefon opomni (Nastavitve › Opomniki). Privzeto 2 in 1 dan prej ob 9:00 ter ob uri objave.
 export const PRIVZETI_OPOMNIKI = { dni: [2, 1], ura: "09:00", uroPrej: false, obUri: true };
 
+// Opomnik, ki ga izbereš pri sami objavi (minut prej). Velja za tistega, ki objavi, in tistega, ki jo je dodal.
+export const OPOMNI_PRI_OBJAVI = [[2880, "2 dni prej"], [1440, "1 dan prej"], [120, "2 uri prej"], [60, "1 uro prej"], [0, "Ob uri objave"]];
+export const PRIVZETO_OPOMNI = [1440, 60];
+const naslovOpomnika = (m) => m === 0 ? "Čas za objavo" : m % 1440 === 0 ? (m === 1440 ? "Jutri objava" : `Čez ${m / 1440} dni objava`)
+  : m === 60 ? "Čez 1 uro objava" : `Čez ${m / 60} ${m === 120 ? "uri" : "ure"} objava`;
+export const opisOpomni = (sez = []) => OPOMNI_PRI_OBJAVI.filter(([m]) => sez.includes(m)).map(([, n]) => n.toLowerCase()).join(", ") || "brez opomnika";
+
 // Opomniki za eno objavo glede na nastavitve tega telefona. Dan 0 = na dan objave (ob izbrani uri, če je pred objavo).
 export function opomnikiZa(o, imeMape, zdaj = Date.now(), nast = PRIVZETI_OPOMNIKI) {
   if (!o || o.objavljeno || !o.kdaj) return [];
-  const n0 = { ...PRIVZETI_OPOMNIKI, ...nast };
   const kaj = `${imeMape} na ${platformeIme(o.platforme)}`;
+  if (Array.isArray(o.opomni)) {
+    return [...new Set(o.opomni)].sort((a, b) => b - a).map((m) => ({ m, t: o.kdaj - m * 60e3 })).filter(({ t }) => t > zdaj)
+      .map(({ m, t }) => ({ id: `${o.id}-m${m}`, kdaj: t, naslov: naslovOpomnika(m), besedilo: m ? `${kaj}, ${kdajBesedilo(o.kdaj, t)}${o.opis ? ` · ${o.opis}` : ""}` : `${kaj}${o.opis ? ` · ${o.opis}` : ""}` }));
+  }
+  const n0 = { ...PRIVZETI_OPOMNIKI, ...nast };
   const d = new Date(o.kdaj);
   const [h, m] = String(n0.ura || "09:00").split(":").map(Number);
   const out = [];
