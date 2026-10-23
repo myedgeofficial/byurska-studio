@@ -146,3 +146,17 @@ test("opomnik, izbran pri objavi", async () => {
   assert.deepEqual(opomnikiZa({ id: "a", kdaj, opomni: [] }, "Art", zdaj), []);
   assert.equal(opisOpomni([60, 1440]), "1 dan prej, 1 uro prej");
 });
+
+test("ikone map in skupina TO DO", async () => {
+  const { ikonaMape, todoOseba } = await import("../src/data.js");
+  assert.equal(ikonaMape({ ime: "Spiritualitybyurska.com" }), "🕊️");
+  assert.equal(ikonaMape({ ime: "Nakupko Web" }), "🌐");
+  assert.equal(ikonaMape({ ime: "Nakupko" }), "🛒");
+  assert.equal(ikonaMape({ ime: "Gesla" }), "🔒");
+  assert.equal(ikonaMape({ ime: "Nakupko", ikona: "🥦" }), "🥦");
+  assert.equal(ikonaMape({ ime: "Kvantna fizika" }), "");
+  assert.equal(todoOseba("TO DO URSKA"), "Urska");
+  assert.equal(todoOseba("ToDo Nives"), "Nives");
+  assert.equal(todoOseba("TO DOmov"), "");
+  assert.equal(todoOseba("Maili"), "");
+});
