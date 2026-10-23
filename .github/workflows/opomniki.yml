@@ -12,7 +12,7 @@ on:
       preizkus:
         description: "Pošlji samo testno obvestilo temu članu"
         type: choice
-        options: ["", "Teo", "Urška", "Nives"]
+        options: ["", "Teo", "Urška", "Nives", "Andjela"]
         default: ""
       naslov:
         description: "Naslov testnega obvestila (ni obvezno)"

@@ -258,7 +258,7 @@ input[type="date"], input[type="time"] { min-height: 48px; }
 /* Telefon: en stolpec v pravem vrstnem redu (pregled, moje naloge, mape, objave). */
 .dom { display: flex; flex-direction: column; }
 .dom-side { display: contents; }
-.dom .stat { order: 1; } .dom .next.hero { order: 2; } .dom .d-moje { order: 3; } .dom .d-obj { order: 4; } .dom .map { order: 5; }
+.dom .stat { order: 1; } .dom .next.hero { order: 2; } .dom .d-moje { order: 3; } .dom .d-obj { order: 4; } .dom .d-moja { order: 4; } .dom .map { order: 5; }
 
 /* Računalnik: čez cel zaslon. Levo pregled, naloge in objave, desno skupine map ena ob drugi. */
 @media (min-width: 1100px) {
@@ -365,6 +365,12 @@ input[type="date"], input[type="time"] { min-height: 48px; }
 .sek-v { --sc: 167, 139, 250; }
 .sek-p { --sc: 244, 114, 182; }
 .sek-a { --sc: 251, 191, 36; }
+.sek-z { --sc: 45, 212, 191; }
+.moja-glava small { margin-left: auto; color: var(--dim); font-size: 13px; font-weight: 600; }
+.moja-glava .chev { color: var(--dim); margin-left: 6px; }
+.moja-glava .st { background: rgba(var(--sc), .18); color: rgb(var(--sc)); border-radius: 10px; padding: 1px 8px; font-size: 13px; font-weight: 700; }
+.moja-opis { display: flex; align-items: center; gap: 6px; margin: 0 0 12px; }
+.moja-opis svg { width: 15px; height: 15px; flex: none; }
 .sek-vec { margin-left: auto; color: var(--accent); font-size: 15px; font-weight: 600; padding: 6px 0 6px 12px; }
 .moje-glava .st { background: rgba(var(--sc), .18); color: rgb(var(--sc)); border-radius: 10px; padding: 1px 8px; font-size: 13px; font-weight: 700; }
 .moje-glava .chev2 { margin-left: auto; }

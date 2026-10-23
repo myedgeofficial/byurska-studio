@@ -5,9 +5,10 @@ process.env.TZ = "Europe/Ljubljana";
 import crypto from "node:crypto";
 import http2 from "node:http2";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { nujnost, odgovoren, terminOpomnika, platformeIme, dan, ura, vidiObjave } from "./data.js";
+import { nujnost, odgovoren, terminOpomnika, platformeIme, dan, ura, vidiObjave, ZACETNI_CLANI, prejemnikiNaloge } from "./data.js";
 
 initializeApp();
 const db = getFirestore();
@@ -42,7 +43,7 @@ async function poslji(zetoni, naslov, besedilo, objava) {
       resolve();
     });
     req.on("error", () => resolve());
-    req.end(JSON.stringify({ aps: { alert: { title: naslov, body: besedilo }, sound: "default" }, objava }));
+    req.end(JSON.stringify({ aps: { alert: { title: naslov, body: besedilo }, sound: "default" }, ...(objava ? { objava } : {}) }));
   })));
   client.close();
   return { ok, mrtvi };
@@ -73,4 +74,24 @@ export const opomnikiObjav = onSchedule({ schedule: "0 9,18 * * *", timeZone: "E
     if (ok) { poslanih += ok; await stanje.set({ zadnji: termin, ob: Date.now() }, { merge: true }); }
   }
   console.log(`Termin ${termin}: utripajočih objav ${objave.length}, poslanih obvestil ${poslanih}.`);
+});
+
+// Nova naloga ali naloga, dodeljena drugemu: obvestilo tistemu, ki ji je dodeljena (pri »Vsem« vsem razen avtorju).
+export const novaNaloga = onDocumentWritten({ document: "mape/{mapa}/naloge/{id}", region: "europe-west1" }, async (e) => {
+  if (!process.env.APNS_KEY_B64) return;
+  const prej = e.data?.before?.exists ? e.data.before.data() : null;
+  const zdaj = e.data?.after?.exists ? e.data.after.data() : null;
+  const komu = prejemnikiNaloge(prej, zdaj);
+  if (!komu) return;
+  const vsi = (await db.collection("naprave").get()).docs.map((d) => ({ id: d.id, email: String(d.data().email || "").toLowerCase() }));
+  const naprave = vsi.filter((n) => n.email && (komu === "vsi" ? n.email !== String(zdaj.uredil || zdaj.dodal || "").toLowerCase() : n.email === komu));
+  if (!naprave.length) return;
+  const mapa = (await db.doc(`mape/${e.params.mapa}`).get()).data() || {};
+  const avtor = String(zdaj.uredil || zdaj.dodal || "").toLowerCase();
+  const ime = (await db.doc(`clani/${avtor}`).get()).data()?.ime || ZACETNI_CLANI[avtor] || avtor.split("@")[0] || "Nekdo";
+  const kratko = String(zdaj.besedilo || "").split("\n").map((x) => x.trim()).find(Boolean) || "";
+  const besedilo = mapa.zaklep ? `${ime} ti je dodal nalogo v zaklenjeni mapi.` : `${kratko.slice(0, 140)}${kratko.length > 140 ? " …" : ""} · od ${ime}`;
+  const { ok, mrtvi } = await poslji(naprave.map((n) => n.id), `Nova naloga: ${mapa.ime || "Mapa"}`, besedilo, "");
+  await Promise.all(mrtvi.map((t) => db.doc(`naprave/${t}`).delete()));
+  console.log(`Naloga ${e.params.id}: poslanih obvestil ${ok}.`);
 });

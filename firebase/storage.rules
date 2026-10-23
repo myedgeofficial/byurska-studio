@@ -5,7 +5,7 @@ service firebase.storage {
     function clan() {
       return request.auth != null
         && request.auth.token.email_verified == true
-        && (request.auth.token.email.lower() in ['teo.simonic7@gmail.com', 'urska.repusic@gmail.com', 'nives.ploj@gmail.com']
+        && (request.auth.token.email.lower() in ['teo.simonic7@gmail.com', 'urska.repusic@gmail.com', 'nives.ploj@gmail.com', 'andjela.collab@gmail.com']
             || firestore.exists(/databases/(default)/documents/clani/$(request.auth.token.email.lower())));
     }
     match /mape/{vse=**} {

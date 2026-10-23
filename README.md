@@ -1,6 +1,6 @@
 # Remako Studio
 
-Zasebna iPhone aplikacija za ekipo (Teo, Urška, Nives), samo prek TestFlighta.
+Zasebna iPhone aplikacija za ekipo (Teo, Urška, Nives, Andjela), samo prek TestFlighta.
 Na računalniku: **https://byurska-studio.web.app** (ista prijava in podatki, objavi se samodejno z workflowom *Spletna različica*).
 
 - **Domov** je postavljen kot skica: Byurska.com s podstranmi in Apps (Nakupko, Manifest, Sentinel). Mape lahko dodajaš.
@@ -8,7 +8,7 @@ Na računalniku: **https://byurska-studio.web.app** (ista prijava in podatki, ob
 - **Vsaka mapa** ima zavihke *TO DO* (naloge s stroški, vsaka z osebo in njeno barvo), *Ideje*, *Urejeno* (pripravljeno za objavo), *Surovo* (posnetki za urejanje), *Gesla*, *Opombe*, *Skripte* (za videe) in *Objave*. Mapo lahko zakleneš z lastnim geslom (meni ⋯). Vsebino shraniš v Fotografije ali pošlješ v Instagram/TikTok z gumbom *Shrani ali deli*.
 - **Gesla** so šifrirana na telefonu s skupnim geslom ekipe (AES-GCM). Strežnik vidi samo šifrirano besedilo.
 - **Nove aplikacije**: vsak dan ob 8:17 workflow *Nove aplikacije v Studio* doda vsak nov javni repozitorij na GitHubu kot mapo pod Apps. Kar izbrišeš, se ne vrne. Ročno dodaš app ali stran z gumbom *+ Dodaj* pod skupino.
-- **Skupno**: vsi člani vidijo vse. Dostop imajo samo člani s potrjeno e-pošto (Teo, Urška in kdor je dodan v Nastavitve › Ekipa).
+- **Skupno**: vsi člani vidijo vse, razen *Moje mape* (osebni zapiski, vidi jih samo lastnik). Dostop imajo samo člani s potrjeno e-pošto (Teo, Urška in kdor je dodan v Nastavitve › Ekipa).
 
 ## Zgradba
 
