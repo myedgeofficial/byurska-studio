@@ -32,6 +32,9 @@ jobs:
         if: steps.check.outputs.ok == 'yes'
         env:
           SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          APNS_KEY_P8: ${{ secrets.APNS_KEY_P8 }}
+          APNS_KEY_ID: ${{ secrets.APNS_KEY_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
@@ -78,4 +81,20 @@ jobs:
           echo "::endgroup::"
 
           $FB deploy --only firestore,storage --force
+
+          echo "::group::Opomniki za objave (funkcija ob 9:00 in 18:00)"
+          if [ -n "$APNS_KEY_P8" ] && [ -n "$APNS_KEY_ID" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            gcloud services enable cloudfunctions.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com run.googleapis.com \
+              eventarc.googleapis.com pubsub.googleapis.com cloudscheduler.googleapis.com cloudbilling.googleapis.com --project "$P" || true
+            cp ../web/src/data.js functions/data.js
+            B64=$(python3 -c "import os,re,textwrap; r=os.environ['APNS_KEY_P8'].replace('\\\\n','\\n'); b=re.sub(r'-----(BEGIN|END)[A-Z ]*-----','',r); b=re.sub(r'[^A-Za-z0-9+/=]','',b); import base64; print(base64.b64encode(('-----BEGIN PRIVATE KEY-----\\n'+'\\n'.join(textwrap.wrap(b,64))+'\\n-----END PRIVATE KEY-----\\n').encode()).decode())")
+            printf 'APNS_KEY_ID=%s\nAPNS_TEAM_ID=%s\nAPNS_KEY_B64=%s\n' "$APNS_KEY_ID" "$APPLE_TEAM_ID" "$B64" > functions/.env
+            (cd functions && npm install --no-audit --no-fund --silent)
+            # Prva objava funkcije 2. generacije včasih pade, dokler Google ne pripravi storitev: poskusimo še enkrat.
+            $FB deploy --only functions --force || { sleep 90; $FB deploy --only functions --force; }
+            rm -f functions/.env
+          else
+            echo "::warning::Manjkajo skrivnosti APNS_KEY_P8, APNS_KEY_ID ali APPLE_TEAM_ID, funkcija za opomnike ni objavljena."
+          fi
+          echo "::endgroup::"
           rm -f "$RUNNER_TEMP/sa.json"
