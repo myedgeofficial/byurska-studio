@@ -39,9 +39,24 @@ jobs:
           FB="npx --yes firebase-tools@14 --project $P --non-interactive"
 
           # Najprej pravila: zbirka »trezor« ni dostopna članom Studia, seznam ni dovoljen nikomur.
-          (cd firebase && $FB deploy --only firestore:rules --force)
+          (cd firebase && $FB deploy --only firestore:rules,storage --force)
 
-          export FB_CONFIG=$($FB apps:sdkconfig WEB --json | python3 app/scripts/fb-config.py)
+          # Priponke se v brskalniku berejo neposredno iz shrambe: dovolimo branje s strani trezorja (CORS).
+          gcloud auth activate-service-account --key-file="$RUNNER_TEMP/sa.json" --quiet
+          B="gs://$P.firebasestorage.app"
+          gcloud storage buckets describe "$B" --format='json(cors_config)' > "$RUNNER_TEMP/cors-zdaj.json" || echo '{}' > "$RUNNER_TEMP/cors-zdaj.json"
+          python3 - "$RUNNER_TEMP/cors-zdaj.json" "$RUNNER_TEMP/cors.json" "https://$STRAN.web.app" <<'PY'
+          import json, sys
+          zdaj = json.load(open(sys.argv[1])).get("cors_config") or []
+          izvor = sys.argv[3]
+          if not any(izvor in (p.get("origin") or []) for p in zdaj):
+              zdaj.append({"origin": [izvor, "https://" + izvor.split("//")[1].replace(".web.app", ".firebaseapp.com")], "method": ["GET"], "maxAgeSeconds": 3600, "responseHeader": ["Content-Type"]})
+          json.dump(zdaj, open(sys.argv[2], "w"))
+          print("CORS:", json.dumps(zdaj))
+          PY
+          gcloud storage buckets update "$B" --cors-file="$RUNNER_TEMP/cors.json"
+
+          export FB_CONFIG=$($FB apps:sdkconfig WEB --json | python3 app/scripts/fb-config.py "$P.firebasestorage.app")
           (cd trezor && npm run build)
           $FB hosting:sites:get "$STRAN" > /dev/null 2>&1 || $FB hosting:sites:create "$STRAN"
           (cd trezor && $FB deploy --only hosting --force)

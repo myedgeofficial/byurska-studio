@@ -14,7 +14,7 @@ service cloud.firestore {
     }
     // Vse skupno vidijo vsi člani, razen osebnih map (zasebno/{e-pošta}/...) in REMAKO trezorja.
     match /{document=**} {
-      allow read, write: if clan() && !(request.path[3] in ['zasebno', 'trezor']);
+      allow read, write: if clan() && !(request.path[3] in ['zasebno', 'trezor', 'trezor-stanje']);
     }
     // Naloge vseh map naenkrat (domači zaslon »Moje naloge«).
     match /{pot=**}/naloge/{id} {
@@ -43,6 +43,11 @@ service cloud.firestore {
       allow create: if imeOk() && vsebinaOk() && request.resource.data.v == 1;
       allow update: if imeOk() && vsebinaOk() && request.resource.data.v == resource.data.v + 1;
       allow delete: if imeOk();
+    }
+    // Javna oznaka, da trezor obstaja (stran potem ob napačni kodi ne ponudi novega trezorja).
+    match /trezor-stanje/obstaja {
+      allow get: if true;
+      allow create, update: if request.resource.data.keys().hasOnly(['obstaja']) && request.resource.data.obstaja == true;
     }
   }
 }

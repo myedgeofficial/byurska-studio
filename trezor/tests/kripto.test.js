@@ -34,3 +34,12 @@ test("moč kode in generator gesel", () => {
 });
 
 function unb(s) { return Buffer.from(s, "base64").length; }
+
+test("datoteke: šifriranje in vezava na ime", async () => {
+  const { zakleniDatoteko, odkleniDatoteko } = await import("../src/kripto.js");
+  const t = await izKode("Remako-2026-trezor", 1000);
+  const bajti = new TextEncoder().encode("%PDF pogodba");
+  const paket = await zakleniDatoteko(t, "abc", bajti);
+  assert.deepEqual(await odkleniDatoteko(t, "abc", paket), bajti);
+  await assert.rejects(odkleniDatoteko(t, "drugo", paket));
+});

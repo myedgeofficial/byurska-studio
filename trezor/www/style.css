@@ -76,3 +76,58 @@ input[type=search] { border-radius: 999px; padding-left: 18px; }
 .check { display: flex; align-items: center; gap: 8px; margin: 0; }
 .check input { width: auto; }
 .toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 84px); transform: translateX(-50%); background: #fff; color: #07060b; font-weight: 600; padding: 10px 18px; border-radius: 999px; z-index: 20; font-size: 14px; }
+.pill { background: transparent; border: 1px solid var(--line2); border-radius: 999px; padding: 9px 14px; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.linkbtn { background: none; color: var(--dim); font-size: 13px; text-decoration: underline; display: block; margin: 10px auto 0; }
+.narrow .row input { margin-top: 0; }
+.narrow .row { margin-top: 12px; }
+.hidden { display: none; }
+.small { font-size: 14px; }
+.left { text-align: left; }
+.dim { color: var(--dim); }
+.warn { color: var(--err) !important; }
+.clip { color: var(--muted); font-size: 13px; flex: none; }
+.file { padding: 6px 0; }
+.k-dokumenti { background: rgba(250,204,21,.16); color: #fde68a; }
+.k-denar { background: rgba(16,185,129,.18); color: #6ee7b7; }
+.sum { padding: 12px 14px; margin-top: 10px; }
+.sumrow { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; padding: 6px 0; font-size: 14px; border-top: 1px solid var(--line); }
+.sumrow span:not(:first-child) { text-align: right; }
+.sumrow.head { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; border-top: 0; }
+.plus { color: var(--good); }
+.graf { width: 100%; height: auto; display: block; }
+.g-os { fill: var(--dim); font-size: 11px; font-family: inherit; }
+.g-mreza { stroke: var(--line); stroke-width: 1; }
+.g-nic { stroke: var(--line2); stroke-width: 1; }
+.g-plus { fill: #34d399; }
+.g-minus { fill: #f87171; }
+.g-linija { fill: none; stroke-width: 2.2; stroke-linejoin: round; }
+.g-linija.plus { stroke: #34d399; } .g-linija.minus { stroke: #f87171; }
+.g-povrsina { opacity: .12; } .g-povrsina.plus { fill: #34d399; } .g-povrsina.minus { fill: #f87171; }
+.pozdrav { font-size: 22px; font-weight: 700; letter-spacing: -.01em; margin: 0 0 14px; }
+.pozdrav .dim { font-weight: 500; font-size: 15px; display: block; margin-top: 2px; }
+.tabs { display: flex; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 4px; margin-bottom: 14px; }
+.tabs button { flex: 1; background: transparent; border-radius: 999px; padding: 9px 10px; font-weight: 600; color: var(--muted); }
+.tabs button.on { background: #fff; color: #07060b; }
+.tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 12px 0; }
+@media (min-width: 560px) { .tiles { grid-template-columns: repeat(4, 1fr); } }
+.tile { background: rgba(18,16,27,.85); border: 1px solid var(--line); border-radius: 16px; padding: 12px; min-width: 0; }
+.tile .lbl { margin: 0 0 4px; font-size: 11px; }
+.tile .num { font-size: 20px; font-weight: 750; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .sub { color: var(--dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pos { color: #34d399; } .neg { color: #f87171; }
+.chart { background: rgba(18,16,27,.85); border: 1px solid var(--line); border-radius: 18px; padding: 14px 12px 8px; margin: 10px 0; }
+.chart h3 { margin: 0 0 8px 4px; font-size: 14px; font-weight: 650; }
+.chart .note { color: var(--dim); font-size: 12px; margin: 4px 4px 6px; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tbl td, .tbl th { padding: 7px 4px; border-top: 1px solid var(--line); text-align: right; }
+.tbl th { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; border-top: 0; }
+.tbl td:first-child, .tbl th:first-child { text-align: left; }
+.insight { background: linear-gradient(100deg, rgba(139,92,246,.14), rgba(236,72,153,.1)); border: 1px solid var(--line2); border-radius: 16px; padding: 12px 14px; margin: 10px 0; font-size: 14px; }
+.insight li { margin: 3px 0; }
+.insight ul { margin: 6px 0 0; padding-left: 18px; }
+.ime-izbira { display: flex; gap: 10px; margin-top: 14px; }
+.ime-izbira button { flex: 1; }
+.linkbtn.inline { display: inline; margin: 0; font-size: inherit; }
+details { margin: 10px 0; }
+summary { cursor: pointer; }
+.tabs.small button { padding: 7px 8px; font-size: 13px; }

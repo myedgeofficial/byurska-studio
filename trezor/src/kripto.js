@@ -62,3 +62,19 @@ export function novoGeslo(dolzina = 20) {
   }
   return out.join("");
 }
+
+// Datoteke (pogodbe, licence): šifrirane bajte shranimo kot iv (12 bajtov) + šifrirano vsebino.
+// Dodatni podatek je ime trezorja in datoteke, zato datoteke ni mogoče podtakniti drugam.
+export async function zakleniDatoteko({ id, kljuc }, imeDatoteke, bajti) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: enc.encode(id + "/" + imeDatoteke) }, kljuc, bajti));
+  const out = new Uint8Array(12 + ct.length);
+  out.set(iv);
+  out.set(ct, 12);
+  return out;
+}
+
+export async function odkleniDatoteko({ id, kljuc }, imeDatoteke, paket) {
+  const p = new Uint8Array(paket);
+  return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: p.slice(0, 12), additionalData: enc.encode(id + "/" + imeDatoteke) }, kljuc, p.slice(12)));
+}
