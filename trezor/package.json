@@ -1,0 +1,13 @@
+{
+  "name": "remako-trezor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "esbuild": "^0.25.0",
+    "firebase": "^11.10.0"
+  }
+}

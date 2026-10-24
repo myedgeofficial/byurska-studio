@@ -1,0 +1,59 @@
+name: REMAKO trezor
+
+# Zasebni trezor za gesla in podatke REMAKO d.o.o.: https://remako-trezor.web.app
+# Vsebina je šifrirana v brskalniku s kodo, v Firestore (projekt byurska-studio) gre samo šifrirano besedilo.
+# Objavi stran (ločena Firebase Hosting stran) in pravila baze, ki zaklenejo zbirko »trezor«.
+on:
+  push:
+    branches: [main, claude/project-thread-8f8pkn]
+    paths: ["trezor/**", "firebase/firestore.rules", ".github/workflows/trezor.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: trezor
+  cancel-in-progress: true
+
+jobs:
+  objavi:
+    runs-on: ubuntu-latest
+    env:
+      P: ${{ vars.FIREBASE_PROJECT || 'byurska-studio' }}
+      STRAN: remako-trezor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Preizkusi šifriranje
+        working-directory: trezor
+        run: npm install --no-audit --no-fund && npm test
+
+      - name: Zgradi in objavi
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA" ]; then echo "::error::Manjka skrivnost FIREBASE_SERVICE_ACCOUNT."; exit 1; fi
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          FB="npx --yes firebase-tools@14 --project $P --non-interactive"
+
+          # Najprej pravila: zbirka »trezor« ni dostopna članom Studia, seznam ni dovoljen nikomur.
+          (cd firebase && $FB deploy --only firestore:rules --force)
+
+          export FB_CONFIG=$($FB apps:sdkconfig WEB --json | python3 app/scripts/fb-config.py)
+          (cd trezor && npm run build)
+          $FB hosting:sites:get "$STRAN" > /dev/null 2>&1 || $FB hosting:sites:create "$STRAN"
+          (cd trezor && $FB deploy --only hosting --force)
+          rm -f "$RUNNER_TEMP/sa.json"
+
+          # Preveri, da spletni ključ deluje z novega naslova (ključ je lahko omejen na znane strani).
+          KEY=$(printf '%s' "$FB_CONFIG" | python3 -c 'import json,sys;print(json.load(sys.stdin)["apiKey"])')
+          ID=$(python3 -c 'print("0"*64)')
+          K=$(curl -s -o /tmp/odg.json -w '%{http_code}' -H "Referer: https://$STRAN.web.app/" \
+            "https://firestore.googleapis.com/v1/projects/$P/databases/(default)/documents/trezor/$ID?key=$KEY")
+          echo "Preizkus baze z novega naslova: HTTP $K (pričakovano 404 = trezor s to kodo ne obstaja)"
+          [ "$K" = "404" ] || { cat /tmp/odg.json; echo "::warning::Baza z naslova $STRAN.web.app ne odgovarja pravilno."; }
+          S=$(curl -s -o /dev/null -w '%{http_code}' "https://$STRAN.web.app/")
+          echo "Stran: HTTP $S"
+          echo "Objavljeno: https://$STRAN.web.app"
