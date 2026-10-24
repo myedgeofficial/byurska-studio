@@ -46,6 +46,10 @@ let pogled = location.hash === "#remako" ? "remako" : "banka"; // "statistika", 
 let statFilter = { racun: "moji", obdobje: "vse", algo: "vsi", vrsta: "zivo" };
 let statOddelek = "pregled", remakoOddelek = "pregled";
 const simPravila = { maxNaDan: 0, stopPoIzgubah: 0, brezSeje: "", samoKz: false };
+let igra = null; // tekoča 3D banka
+const POGLED_KLJUC = "remako-banka-pogled";
+const beriPogled = () => { try { return localStorage.getItem(POGLED_KLJUC) || "igra"; } catch (e) { return "igra"; } };
+const shraniPogled = (v) => { try { localStorage.setItem(POGLED_KLJUC, v); } catch (e) {} };
 const trejdiCache = new Map(); // id uvoza → trejdi (samo v pomnilniku)
 
 // Ime na tej napravi (za pozdrav). Ni skrivnost, zato v localStorage.
@@ -72,6 +76,7 @@ function h(tag, lastnosti = {}, ...otroci) {
     if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
     else if (k === "class") el.className = v;
     else if (k === "value") el.value = v;
+    else if (k === "style") el.style.cssText = v; // CSSOM, ker CSP ne dovoli atributa style
     else el.setAttribute(k, v === true ? "" : v);
   }
   for (const o of otroci.flat(Infinity)) if (o != null && o !== false) el.append(o instanceof Node ? o : String(o));
@@ -80,9 +85,11 @@ function h(tag, lastnosti = {}, ...otroci) {
 // Kot replaceChildren, a preskoči prazne (null, false) in splošči sezname.
 const zamenjaj = (el, ...otroci) => el.replaceChildren(...otroci.flat(Infinity).filter((o) => o != null && o !== false));
 const zaslon = (...vsebina) => {
+  if (igra) { igra.ustavi(); igra = null; }
   const plosca = vsebina.some((x) => x?.classList?.contains("dash"));
   app.classList.toggle("siroko", (pogled === "statistika" || pogled === "remako") && vsebina.some((x) => x?.classList?.contains("tabs")));
   app.classList.toggle("dash-mode", plosca);
+  app.classList.toggle("igra-mode", vsebina.some((x) => x?.classList?.contains("igra")));
   app.classList.toggle("banka-mode", pogled === "banka" && vsebina.some((x) => x?.classList?.contains("banka")));
   document.body.classList.toggle("dash-body", plosca);
   if (plosca && location.hash !== "#remako") history.replaceState(null, "", "#remako");
@@ -398,9 +405,88 @@ function seznam() {
   );
 }
 
+/* ---------- 3D banka: figurica v lobiju ---------- */
+
+let bankaBrez3D = false;
+async function igraZaslon() {
+  const ovoj = h("div", { class: "igra" }, h("div", { class: "igra-nalaganje" }, h("div", { class: "spin" }), h("span", {}, "Odpiram banko …")));
+  zaslon(glavaOdprta(), zavihki(), ovoj);
+  const vnosi = podatki.vnosi || [];
+  const uvozi = podatki.uvozi || [];
+  let trejdi = [];
+  let modul;
+  try {
+    [trejdi, modul] = await Promise.all([uvozi.length ? naloziTrejde().then((a) => a.filter((t) => t.v === "zivo")) : [], import("./igra.js")]);
+  } catch (e) { console.error(e); }
+  if (pogled !== "banka" || !ovoj.isConnected) return;
+  if (!modul) { bankaBrez3D = true; return bankaZaslon(); }
+  const kdoZa = new Map(uvozi.map((u) => [u.racun, trgovalec(u)]));
+  const zaOsebo = (k) => trejdi.filter((t) => (kdoZa.get(t.r) || "Drugi") === k);
+  const vsota = (a) => Math.round(a.reduce((x, t) => x + t.p, 0) * 100) / 100;
+  const skupaj = vsota(trejdi);
+  const nv = nivo(Math.max(0, skupaj));
+  const teo = zaOsebo("Teo"), tim = zaOsebo("Tim"), algo = zaOsebo("Algoritmi");
+  const pTeo = vsota(teo), pTim = vsota(tim), pAlgo = vsota(algo);
+  const wr = (a) => (a.length ? Math.round((a.filter((t) => t.p > 0).length / a.length) * 100) + " %" : "—");
+  const znak = (v) => (v > 0 ? "+" : "") + evri(v);
+  const barvaPnl = (v) => (v > 0 ? "#6ee7b7" : v < 0 ? "#fda4af" : "#ffffff");
+  const denar = vnosi.filter((v) => v.kat === "denar");
+  const izplacano = denar.filter((v) => v.smer !== "nakazilo").reduce((a, v) => a + (Number(v.znesek) || 0), 0);
+  const dokumenti = vnosi.filter((v) => v.kat === "dokumenti");
+  const kmalu = dokumenti.filter((v) => v.veljaDo && dniDo(v.veljaDo) <= 30);
+  const stGesel = vnosi.filter((v) => ["gesla", "trgovanje"].includes(v.kat)).length;
+  const stPodatkov = vnosi.filter((v) => ["podjetje", "banka"].includes(v.kat)).length;
+  const mt5 = vnosi.find((v) => v.kat === "trgovanje" && /metatrader|mt5/i.test(v.naziv));
+  const stAlgo = new Set(algo.map((t) => t.a).filter(Boolean)).size;
+  const PRAG = 5000;
+
+  const pojdi = (fn) => () => { fn(); seznam(); window.scrollTo(0, 0); };
+  const vStat = (racun) => pojdi(() => { pogled = "statistika"; statOddelek = "pregled"; statFilter.racun = racun; statFilter.algo = "vsi"; statFilter.vrsta = "zivo"; });
+  const vTrezor = (kat) => pojdi(() => { pogled = "trezor"; filter.kat = kat; filter.isci = ""; });
+  const vRemako = pojdi(() => { pogled = "remako"; remakoOddelek = "pregled"; });
+  const miza = (ime, oseba, barva, a, p, racun) => {
+    const n = nivo(Math.max(0, p));
+    return { ime, oseba, vrsta: "miza", barva, glavno: znak(p), barvaGlavno: barvaPnl(p), pod: `${a.length} trejdov · uspešnost ${wr(a)} · ${racun}`, oznaka: `Nv. ${n.n}`, napredek: n.napredek, klik: vStat("oseba:" + oseba) };
+  };
+  const oddelki = [
+    miza("Miza Teo", "Teo", "#a78bfa", teo, pTeo, "AMP"),
+    { ime: "Analitika", vrsta: "analitika", barva: "#60a5fa", glavno: `${trejdi.length} trejdov`, pod: `${uvozi.length} zgodovin · statistika, simulator`, klik: pojdi(() => { pogled = "statistika"; statOddelek = "instr"; statFilter.racun = "vsi"; }) },
+    { ime: "Papirologija", vrsta: "papir", barva: "#f5d08a", glavno: String(dokumenti.length), oznaka: kmalu.length ? `${kmalu.length} poteka` : "", pod: kmalu.length ? `Kmalu poteče: ${kmalu.map((v) => v.naziv).join(", ")}` : "pogodbe, licence, dovoljenja", klik: vTrezor("dokumenti") },
+    { ime: "Podatki REMAKO", vrsta: "podatki", barva: "#c4b5fd", glavno: String(stPodatkov), pod: "naslov, matična, davčna, banka", klik: vTrezor("podjetje") },
+    miza("Miza Tim", "Tim", "#f472b6", tim, pTim, "Bitunix"),
+    { ime: "Algoritmi MT5", vrsta: "algo", barva: "#22d3ee", glavno: algo.length ? znak(pAlgo) : "Še ni strategij", barvaGlavno: algo.length ? barvaPnl(pAlgo) : null, pod: algo.length ? `${stAlgo || 1} strategij · ${algo.length} trejdov` : "avtomatsko trgovanje Teo + Tim", klik: mt5 ? vStat(mt5.naziv) : vStat("vsi") },
+    { ime: "Blagajna · payouti", vrsta: "blagajna", barva: "#fbbf24", glavno: evri(izplacano), pod: `${denar.length} izplačil in nakazil`, klik: vTrezor("denar") },
+    { ime: "Sef · gesla", vrsta: "sef", barva: "#34d399", glavno: String(stGesel), pod: "uporabniška imena, gesla, računi", klik: vTrezor("gesla") },
+  ];
+  const nad = (ime, p, klik) => ({ ime, odklenjeno: p >= PRAG, opis: p >= PRAG ? `${znak(p)} · odklenjeno` : `Odklene se pri ${evri(PRAG)} · še ${evri(Math.max(0, PRAG - p))}`, klik });
+  const nadstropja = [
+    nad("Trading Teo", pTeo, vStat("oseba:Teo")),
+    nad("Trading Tim", pTim, vStat("oseba:Tim")),
+    nad("Algo lab", pAlgo, mt5 ? vStat(mt5.naziv) : vStat("vsi")),
+    { ime: "Penthouse · Uprava", odklenjeno: true, opis: `Skupna statistika Teo + Tim · ${znak(skupaj)}`, klik: vRemako },
+  ];
+  const trak = [...trejdi].sort((a, b) => b.t.localeCompare(a.t)).slice(0, 24)
+    .map((t) => ({ t: `${kdoZa.get(t.r) || ""} ${t.s || ""} ${t.p >= 0 ? "▲ +" : "▼ "}${evri(t.p)}`, plus: t.p >= 0 }));
+  const jaz = beriIme() || "Teo";
+  zamenjaj(ovoj);
+  try {
+    igra = modul.zazeni(ovoj, {
+      igralec: jaz, partner: jaz === "Tim" ? "Teo" : "Tim",
+      nivo: { ...nv, opis: nv.doo != null ? `${znak(skupaj)} · še ${evri(nv.doo - Math.max(0, skupaj))} do nivoja ${nv.n + 1}` : `${znak(skupaj)} · največji nivo` },
+      oddelki, nadstropja, trak,
+      klasicno: () => { shraniPogled("klasicno"); seznam(); },
+    });
+  } catch (e) {
+    console.error(e);
+    bankaBrez3D = true;
+    bankaZaslon();
+  }
+}
+
 /* ---------- Banka REMAKO (domača stran v stilu igre) ---------- */
 
 async function bankaZaslon() {
+  if (beriPogled() === "igra" && !bankaBrez3D) return igraZaslon();
   const vnosi = podatki.vnosi || [];
   const uvozi = podatki.uvozi || [];
   const denar = vnosi.filter((v) => v.kat === "denar");
@@ -412,7 +498,8 @@ async function bankaZaslon() {
   const telo = h("div", { class: "b-telo" }, h("div", { class: "spin" }));
   const nivoVrstica = h("div", { class: "b-nivo" });
   const stavba = h("div", { class: "banka" }, h("div", { class: "b-streha-ovoj" }), h("div", { class: "b-nadstropja" }), telo, stopnice());
-  zaslon(glavaOdprta(), pozdrav(), zavihki(), nivoVrstica, stavba);
+  const v3D = bankaBrez3D ? null : h("button", { class: "pill b-3d", onclick: () => { shraniPogled("igra"); seznam(); } }, ikona("podjetje"), "Vstopi v 3D banko");
+  zaslon(glavaOdprta(), pozdrav(), zavihki(), v3D, nivoVrstica, stavba);
 
   let trejdi = [];
   try { if (uvozi.length) trejdi = (await naloziTrejde()).filter((t) => t.v === "zivo"); } catch (e) { console.error(e); }

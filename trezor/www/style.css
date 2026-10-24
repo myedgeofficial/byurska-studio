@@ -515,3 +515,63 @@ main.banka-mode { max-width: 1100px; }
 .b-sef { fill: rgba(244,114,182,.12); stroke: #f472b6; stroke-width: 2; } .b-sef-k { fill: none; stroke: #f472b6; stroke-width: 2; } .b-sef-r { stroke: rgba(244,114,182,.6); stroke-width: 1.5; }
 .s-podatki { --c: #c4b5fd; }
 .b-ilu-ik { width: 52px; height: 52px; color: #c4b5fd; stroke-width: 1.4; }
+
+/* ---------- 3D banka ---------- */
+main.igra-mode { max-width: 1500px; }
+.igra { position: relative; height: calc(100dvh - 170px); min-height: 440px; border-radius: 24px; overflow: hidden; background: #07060d;
+  border: 1px solid var(--line2); box-shadow: 0 30px 80px -30px rgba(139,92,246,.45); touch-action: none; user-select: none; -webkit-user-select: none; }
+.igra-platno { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; outline: none; }
+.igra-platno:active { cursor: grabbing; }
+.igra-nalaganje { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 14px; color: var(--muted); font-weight: 700; }
+.igra-hud { position: absolute; top: 14px; left: 14px; right: 14px; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; pointer-events: none; }
+.igra-hud > * { pointer-events: auto; }
+.igra-nivo { display: grid; gap: 4px; padding: 12px 16px; min-width: 210px; border-radius: 18px; background: rgba(10,8,20,.55);
+  backdrop-filter: blur(14px) saturate(1.4); -webkit-backdrop-filter: blur(14px) saturate(1.4); border: 1px solid var(--line2); }
+.igra-nivo b { font-size: 20px; font-weight: 850; background: var(--grad3); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.igra-nivo span { font-size: 14px; color: var(--muted); font-weight: 600; }
+.igra-xp { height: 6px; border-radius: 6px; background: rgba(255,255,255,.1); overflow: hidden; margin-top: 4px; }
+.igra-xp div { height: 100%; background: var(--grad3); border-radius: 6px; }
+.igra-gumb { font: inherit; font-weight: 750; font-size: 15px; color: var(--text); padding: 10px 16px; border-radius: 999px; cursor: pointer;
+  background: rgba(10,8,20,.55); border: 1px solid var(--line2); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.igra-gumb:hover { border-color: var(--accent); }
+.igra-pomoc { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); padding: 10px 18px; border-radius: 999px; white-space: nowrap;
+  background: rgba(10,8,20,.6); border: 1px solid var(--line2); color: var(--muted); font-size: 14px; font-weight: 650;
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); transition: opacity .8s; pointer-events: none; max-width: calc(100% - 28px); overflow: hidden; text-overflow: ellipsis; }
+.igra-pomoc.skrij { opacity: 0; }
+.igra-poziv { --b: #a78bfa; position: absolute; left: 50%; bottom: 26px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+  display: flex; align-items: center; gap: 14px; padding: 10px 10px 10px 20px; border-radius: 999px; background: rgba(10,8,20,.72);
+  border: 1.5px solid var(--b); box-shadow: 0 0 34px -6px var(--b); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  transition: opacity .25s, transform .25s; z-index: 2; }
+.igra-poziv.on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.igra-poziv b { font-size: 18px; font-weight: 850; white-space: nowrap; }
+.igra-vstop { font: inherit; font-weight: 800; font-size: 16px; color: #0b0912; background: var(--b); border: 0; border-radius: 999px; padding: 11px 20px; cursor: pointer; white-space: nowrap; }
+.igra-dvigalo { position: absolute; right: 14px; top: 50%; transform: translate(20px, -50%); opacity: 0; pointer-events: none; width: min(340px, calc(100% - 28px));
+  display: grid; gap: 8px; padding: 16px; border-radius: 22px; background: rgba(10,8,20,.78); border: 1px solid rgba(251,191,36,.45);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); transition: opacity .25s, transform .25s; z-index: 3; }
+.igra-dvigalo.on { opacity: 1; transform: translate(0, -50%); pointer-events: auto; }
+.igra-dvigalo h3 { margin: 0 0 4px; font-size: 18px; color: var(--gold); }
+.igra-nad { font: inherit; text-align: left; display: grid; gap: 2px; padding: 12px 14px; border-radius: 14px; cursor: pointer; color: var(--text);
+  background: rgba(255,255,255,.05); border: 1px solid var(--line2); }
+.igra-nad b { font-size: 17px; font-weight: 800; }
+.igra-nad span { font-size: 13.5px; color: var(--muted); font-weight: 600; }
+.igra-nad:hover:not(:disabled) { border-color: var(--gold); background: rgba(251,191,36,.08); }
+.igra-nad.zaklenjeno { opacity: .55; cursor: not-allowed; }
+.igra-nad.zaklenjeno b::before { content: "🔒 "; }
+.igra-zatemni { position: absolute; inset: 0; background: #07060d; opacity: 0; pointer-events: none; transition: opacity .35s; z-index: 4; }
+.igra-zatemni.on { opacity: 1; }
+.igra-joy { position: absolute; left: 22px; bottom: 22px; width: 124px; height: 124px; border-radius: 50%; touch-action: none; z-index: 2;
+  background: radial-gradient(circle, rgba(167,139,250,.14), rgba(10,8,20,.4)); border: 1.5px solid rgba(196,181,253,.35);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.igra-joy-g { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%;
+  background: var(--grad); box-shadow: 0 0 24px rgba(236,72,153,.55); pointer-events: none; }
+.igra-joy ~ .igra-poziv { left: auto; right: 14px; transform: translate(0, 20px); }
+.igra-joy ~ .igra-poziv.on { transform: none; }
+.b-3d { margin: 0 auto 12px; display: flex; }
+@media (max-width: 640px) {
+  .igra { height: calc(100dvh - 150px); border-radius: 18px; margin: 0 -8px; }
+  .igra-nivo { min-width: 0; padding: 9px 12px; }
+  .igra-nivo b { font-size: 17px; } .igra-nivo span { font-size: 12.5px; }
+  .igra-gumb { font-size: 13px; padding: 8px 12px; }
+  .igra-poziv b { font-size: 15px; } .igra-vstop { font-size: 15px; padding: 10px 16px; }
+}
+.igra.dotik .igra-pomoc { bottom: auto; top: 112px; font-size: 13px; }
