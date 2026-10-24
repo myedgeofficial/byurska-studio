@@ -50,8 +50,13 @@ jobs:
           # Preveri, da spletni ključ deluje z novega naslova (ključ je lahko omejen na znane strani).
           KEY=$(printf '%s' "$FB_CONFIG" | python3 -c 'import json,sys;print(json.load(sys.stdin)["apiKey"])')
           ID=$(python3 -c 'print("0"*64)')
-          K=$(curl -s -o /tmp/odg.json -w '%{http_code}' -H "Referer: https://$STRAN.web.app/" \
-            "https://firestore.googleapis.com/v1/projects/$P/databases/(default)/documents/trezor/$ID?key=$KEY")
+          # Nova pravila začnejo veljati v približno minuti.
+          for i in 1 2 3 4 5 6 7 8; do
+            K=$(curl -s -o /tmp/odg.json -w '%{http_code}' -H "Referer: https://$STRAN.web.app/" \
+              "https://firestore.googleapis.com/v1/projects/$P/databases/(default)/documents/trezor/$ID?key=$KEY")
+            [ "$K" = "404" ] && break
+            sleep 15
+          done
           echo "Preizkus baze z novega naslova: HTTP $K (pričakovano 404 = trezor s to kodo ne obstaja)"
           [ "$K" = "404" ] || { cat /tmp/odg.json; echo "::warning::Baza z naslova $STRAN.web.app ne odgovarja pravilno."; }
           S=$(curl -s -o /dev/null -w '%{http_code}' "https://$STRAN.web.app/")
