@@ -940,9 +940,14 @@ async function statistikaZaslon() {
   }
   if (pogled !== "statistika") return;
   const racuni = [...new Set(uvozi.map((u) => u.racun))];
-  const moji = racuni.filter((r) => trgovalec(uvozi.find((u) => u.racun === r)) === beriIme());
-  if (statFilter.racun === "moji" && !moji.length) statFilter.racun = "vsi";
-  const naRacunu = (r) => statFilter.racun === "vsi" || (statFilter.racun === "moji" ? moji.includes(r) : r === statFilter.racun);
+  const jaz = beriIme();
+  const osebaRacuna = (r) => trgovalec(uvozi.find((u) => u.racun === r));
+  const osebe = [...new Set(racuni.map(osebaRacuna))].sort((a, b) => (a === jaz ? -1 : b === jaz ? 1 : a.localeCompare(b)));
+  if (statFilter.racun === "moji") statFilter.racun = osebe.includes(jaz) ? "oseba:" + jaz : "vsi";
+  const izbranaOseba = statFilter.racun.startsWith("oseba:") ? statFilter.racun.slice(6) : null;
+  if (izbranaOseba && !osebe.includes(izbranaOseba)) statFilter.racun = "vsi";
+  const moji = racuni.filter((r) => osebaRacuna(r) === jaz);
+  const naRacunu = (r) => statFilter.racun === "vsi" || (izbranaOseba ? osebaRacuna(r) === izbranaOseba : r === statFilter.racun);
   const meja = { vse: 0, "30": Date.now() - 30 * 864e5, "90": Date.now() - 90 * 864e5, leto: new Date(new Date().getFullYear(), 0, 1).getTime() }[statFilter.obdobje] || 0;
   const vVrsti = vsi.filter((t) => t.v === statFilter.vrsta);
   const algoritmi = [...new Set(vVrsti.filter((t) => naRacunu(t.r)).map((t) => t.a).filter(Boolean))];
@@ -954,8 +959,8 @@ async function statistikaZaslon() {
     vsi.some((t) => t.v === "test") ? h("div", { class: "tabs small" },
       h("button", { class: statFilter.vrsta === "zivo" ? "on" : "", onclick: () => ((statFilter.vrsta = "zivo"), seznam()) }, "Živo trgovanje"),
       h("button", { class: statFilter.vrsta === "test" ? "on" : "", onclick: () => ((statFilter.vrsta = "test"), seznam()) }, "Backtesti")) : null,
-    h("div", { class: "chips" }, moji.length ? cip(statFilter.racun === "moji", "Moji računi", () => ((statFilter.racun = "moji"), seznam())) : null,
-      cip(statFilter.racun === "vsi", "Vsi računi", () => ((statFilter.racun = "vsi"), seznam())),
+    h("div", { class: "chips" }, osebe.map((o) => cip(statFilter.racun === "oseba:" + o, o === jaz ? `Moja (${o})` : o, () => ((statFilter.racun = "oseba:" + o), seznam()))),
+      cip(statFilter.racun === "vsi", "Vsi", () => ((statFilter.racun = "vsi"), seznam())),
       racuni.map((r) => cip(statFilter.racun === r, r, () => ((statFilter.racun = r), seznam())))),
     algoritmi.length ? h("div", { class: "chips" }, cip(statFilter.algo === "vsi", "Vsi algoritmi", () => ((statFilter.algo = "vsi"), seznam())),
       algoritmi.map((a) => cip(statFilter.algo === a, [ikona("robot"), a], () => ((statFilter.algo = a), seznam())))) : null,
@@ -973,7 +978,7 @@ async function statistikaZaslon() {
   const najUra = [...sTrejdi(ure)].sort((a, b) => b.p - a.p);
 
   const an = napredno(izbrani);
-  const nasvet = coach(st, an, evri, odstotek);
+  const nasvet = coach(st, an, evri, odstotek, false);
   const teden = tedenski(izbrani);
   const pf = (x) => (Number.isFinite(x) ? x.toFixed(2) : "∞");
   const k = an.konsistenca;
@@ -1038,8 +1043,8 @@ async function statistikaZaslon() {
         teden.ta.n || teden.prej.n ? kartica("Ta teden proti prejšnjemu", null, par([["Ta teden", teden.ta.p, teden.ta.p >= 0 ? "plus" : "minus"], ["Prejšnji", teden.prej.p, teden.prej.p >= 0 ? "plus" : "minus"]]),
           h("div", { class: "note" }, `${teden.ta.n} trejdov (${odstotek(teden.ta.wr)}) · prej ${teden.prej.n} (${odstotek(teden.prej.wr)})`)) : null),
       nasvet.skodi.length || nasvet.pomaga.length ? h("div", { class: "coach" },
-        h("div", { class: "coach-col" }, h("b", {}, "Kaj ti škodi"), nasvet.skodi.length ? h("ul", {}, nasvet.skodi.slice(0, 4).map((u) => h("li", {}, u))) : h("p", { class: "dim small" }, "Nič izrazitega.")),
-        h("div", { class: "coach-col dobro" }, h("b", {}, "Kaj ti pomaga"), nasvet.pomaga.length ? h("ul", {}, nasvet.pomaga.slice(0, 4).map((u) => h("li", {}, u))) : h("p", { class: "dim small" }, "Še premalo podatkov."))) : null,
+        h("div", { class: "coach-col" }, h("b", {}, !izbranaOseba || izbranaOseba === jaz ? "Kaj ti škodi" : `Kaj škodi (${izbranaOseba})`), nasvet.skodi.length ? h("ul", {}, nasvet.skodi.slice(0, 4).map((u) => h("li", {}, u))) : h("p", { class: "dim small" }, "Nič izrazitega.")),
+        h("div", { class: "coach-col dobro" }, h("b", {}, !izbranaOseba || izbranaOseba === jaz ? "Kaj ti pomaga" : `Kaj pomaga (${izbranaOseba})`), nasvet.pomaga.length ? h("ul", {}, nasvet.pomaga.slice(0, 4).map((u) => h("li", {}, u))) : h("p", { class: "dim small" }, "Še premalo podatkov."))) : null,
       h("div", { class: "mreza dve" },
         graf("Krivulja kapitala", krivulja(st.krivulja)),
         graf("Rezultat po dnevih", stolpci(zadnjiDnevi.map((d) => ({ oznaka: d.k.slice(8) + "." + d.k.slice(5, 7), v: d.p, opis: `${datum(d.k)}: ${evri(d.p)}, ${d.n} trejdov` })), { oznakeVsakih: Math.ceil(zadnjiDnevi.length / 8) }))),
