@@ -6,7 +6,8 @@ import { initializeFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, onS
 import { getStorage, connectStorageEmulator, ref as sref, uploadBytes, getBytes, deleteObject } from "firebase/storage";
 import { read as beriTabelo, utils as tabelaUtils } from "xlsx";
 import { najdiTabelo, vTrejde, ugani, statistika as izracunaj, kljucTrejda, DNEVI, MESECI } from "./trejdi.js";
-import { krivulja, stolpci } from "./grafi.js";
+import { krivulja, stolpci, toplota } from "./grafi.js";
+import { napredno, simuliraj, coach, tedenski, trajanje as trajanjeKratko, SEJE } from "./analiza.js";
 import { ikona } from "./ikone.js";
 import { izKode, zakleni, odkleni, mocKode, novoGeslo, NAJMANJ_ZNAKOV, zakleniDatoteko, odkleniDatoteko } from "./kripto.js";
 
@@ -42,6 +43,7 @@ let odjava = null;
 let filter = { kat: "vse", isci: "" };
 let pogled = "trezor"; // ali "statistika"
 let statFilter = { racun: "vsi", obdobje: "vse", algo: "vsi", vrsta: "zivo" };
+const simPravila = { maxNaDan: 0, stopPoIzgubah: 0, brezSeje: "", samoKz: false };
 const trejdiCache = new Map(); // id uvoza → trejdi (samo v pomnilniku)
 
 // Ime na tej napravi (za pozdrav). Ni skrivnost, zato v localStorage.
@@ -217,7 +219,7 @@ const oznaciObstoj = () => setDoc(OZNAKA, { obstaja: true }).catch(() => {});
 const ZACETNI = [
   ["z-ampfutures", "AMP Futures", "https://www.ampfutures.com", [["Trguje", "Teo (samo Teo)"], ["Številka računa", ""], ["Platforma", ""], ["Strežnik", ""], ["Varnostne kode 2FA", "", true]]],
   ["z-metatrader5", "MetaTrader 5", "https://www.metatrader5.com", [["Namen", "Izdelava in testiranje algoritmov, avtomatsko trgovanje"], ["Številka računa (login)", ""], ["Strežnik", ""], ["Borzni posrednik", ""], ["Investorsko geslo (samo branje)", "", true]]],
-  ["z-bitonex", "Bitonex", "", [["Trguje", "Tim (samo Tim)"], ["UID", ""], ["API ključ", "", true], ["API skrivnost", "", true], ["Varnostne kode 2FA", "", true]]],
+  ["z-bitonex", "Bitunix", "https://www.bitunix.com", [["Trguje", "Tim (samo Tim)"], ["UID", ""], ["API ključ", "", true], ["API skrivnost", "", true], ["Varnostne kode 2FA", "", true]]],
 ];
 const ZACETNI_TRGUJE = { "z-ampfutures": ["Trguje", "Teo (samo Teo)"], "z-metatrader5": ["Namen", "Izdelava in testiranje algoritmov, avtomatsko trgovanje"], "z-bitonex": ["Trguje", "Tim (samo Tim)"] };
 const PODJETJE_POLJA = [
@@ -229,9 +231,11 @@ const PODJETJE_POLJA = [
 ];
 
 function dopolni() {
-  if (podatki.dopolnjeno >= 3) return;
+  if (podatki.dopolnjeno >= 4) return;
   spremeni((d) => {
-    if (d.dopolnjeno >= 3) return;
+    if (d.dopolnjeno >= 4) return;
+    const bx = d.vnosi.find((v) => v.id === "z-bitonex");
+    if (bx && bx.naziv === "Bitonex") Object.assign(bx, { naziv: "Bitunix", povezava: bx.povezava || "https://www.bitunix.com" });
     const firma = d.vnosi.find((v) => v.naziv === "REMAKO d.o.o.");
     if (firma) {
       firma.polja ||= [];
@@ -250,7 +254,7 @@ function dopolni() {
       if (d.dopolnjeno >= 2 || d.vnosi.some((v) => v.id === id)) continue;
       d.vnosi.push({ id, naziv, kat: "trgovanje", uporabnik: "", geslo: "", povezava, polja: polja.map(([ime, vrednost, skrito]) => ({ ime, vrednost, skrito: !!skrito })), spremenjeno: Date.now() });
     }
-    d.dopolnjeno = 3;
+    d.dopolnjeno = 4;
   }).then(() => document.querySelector(".tabs") && !document.querySelector(".sheet") && seznam()).catch((e) => console.error(e));
 }
 
@@ -389,7 +393,7 @@ function pregled(vnosi) {
   const kartica = (ik, lbl, num, sub, kat) => h("button", { class: "stat k-" + kat, onclick: () => ((filter.kat = kat), seznam()) },
     h("span", { class: "stat-ik" }, ikona(ik)), h("span", { class: "lbl" }, lbl), h("span", { class: "num" }, num), h("span", { class: "sub" }, sub));
   return h("div", { class: "overview" },
-    kartica("graf", "Trgovalni računi", String(racuni), "AMP · Bitonex · MT5", "trgovanje"),
+    kartica("graf", "Trgovalni računi", String(racuni), "AMP · Bitunix · MT5", "trgovanje"),
     kartica("denar", "Izplačano", evri(izplacano), `${denar.length} vnosov`, "denar"),
     kartica("dokument", "Naslednji potek", naslednji ? new Date(naslednji.veljaDo + "T12:00").toLocaleDateString("sl-SI", { day: "numeric", month: "short" }) : "—", naslednji ? naslednji.naziv : "Licence in pogodbe", "dokumenti"));
 }
@@ -760,7 +764,7 @@ async function statistikaZaslon() {
     return zamenjaj(vsebina, h("div", { class: "card" },
       h("h1", {}, "Statistika trejdov"),
       h("p", { class: "muted" }, "Uvozi zgodovino trejdov iz platforme in tukaj dobita celotno statistiko z grafi: dobiček, uspešnost, najboljše in najslabše dni, ure in instrumente."),
-      h("p", { class: "muted small" }, "MetaTrader 5: Zgodovina › desni klik › Poročilo › Excel ali HTML. AMP Futures: izpisek trejdov (Trade/Fill report) iz platforme kot CSV ali Excel. Bitonex: Zgodovina naročil › Izvozi (CSV)."),
+      h("p", { class: "muted small" }, "MetaTrader 5: Zgodovina › desni klik › Poročilo › Excel ali HTML. AMP Futures: izpisek trejdov (Trade/Fill report) iz platforme kot CSV ali Excel. Bitunix: Futures › Zgodovina › Izvozi (CSV). Topstep: Trades › Export (CSV)."),
       h("button", { class: "btn", onclick: () => uvoziTrejde() }, "Uvozi prvo zgodovino")));
   }
   let vsi;
@@ -810,6 +814,34 @@ async function statistikaZaslon() {
     st.najDan && `Najboljši dan: ${datum(st.najDan.k)} (${evri(st.najDan.p)}), najslabši: ${datum(st.najslDan.k)} (${evri(st.najslDan.p)}).`,
   ].filter(Boolean);
 
+  const an = napredno(izbrani);
+  const nasvet = coach(st, an, evri, odstotek);
+  const teden = tedenski(izbrani);
+  const pf = (x) => (Number.isFinite(x) ? x.toFixed(2) : "∞");
+  const vrsticaSkupine = (x) => [x.ime, String(x.n), odstotek(x.wr), pf(x.pf), pnl(x.p)];
+  const simKartica = h("div", { class: "chart" });
+  const narisiSim = () => {
+    const sim = simuliraj(izbrani, simPravila);
+    const izbor = (opis, kljuc, moznosti) => h("label", {}, opis, h("select", { onchange: (e) => ((simPravila[kljuc] = kljuc === "brezSeje" ? e.target.value : +e.target.value), narisiSim()) },
+      moznosti.map(([v, ime]) => h("option", { value: v, selected: simPravila[kljuc] === v }, ime))));
+    const razlika = sim.neto - st.neto;
+    zamenjaj(simKartica, h("h3", {}, "Simulator pravil"),
+      h("div", { class: "note" }, "Kaj bi bilo, če bi se držala teh pravil (na istih trejdih)."),
+      h("div", { class: "sim" },
+        izbor("Največ trejdov na dan", "maxNaDan", [[0, "brez omejitve"], [1, "1"], [2, "2"], [3, "3"], [5, "5"], [10, "10"], [20, "20"]]),
+        izbor("Konec dneva po izgubah", "stopPoIzgubah", [[0, "nikoli"], [1, "po 1. izgubi"], [2, "po 2 izgubah"], [3, "po 3 izgubah"]]),
+        izbor("Brez seje", "brezSeje", [["", "trguj vse seje"], ...SEJE.slice(0, 3).map(([ime]) => [ime, ime])]),
+        h("label", { class: "check" }, h("input", { type: "checkbox", checked: simPravila.samoKz, onchange: (e) => ((simPravila.samoKz = e.target.checked), narisiSim()) }), "Samo v killzonah (brez NY kosila)")),
+      h("div", { class: "tiles" },
+        tile("Neto s pravili", pnl(sim.neto), h("span", { class: razlika >= 0 ? "pos" : "neg" }, (razlika >= 0 ? "+" : "−") + evri(Math.abs(razlika)) + " proti dejanskemu")),
+        tile("Trejdov", String(sim.n), `od ${st.n}`),
+        tile("Uspešnost", odstotek(sim.wr), `dejansko ${odstotek(st.wr)}`),
+        tile("Največji padec", h("span", { class: "neg" }, "−" + evri(sim.maxDD)), `dejansko −${evri(st.maxDD)}`)),
+      sim.krivulja.length > 1 ? krivulja(sim.krivulja, { visina: 150 }) : null);
+  };
+  narisiSim();
+  const k = an.konsistenca;
+
   const tabela = (glava, vrstice) => h("table", { class: "tbl" }, h("tr", {}, glava.map((g) => h("th", {}, g))), vrstice.map((r) => h("tr", {}, r.map((c) => h("td", {}, c)))));
 
   zamenjaj(vsebina, 
@@ -828,12 +860,37 @@ async function statistikaZaslon() {
       tile("Niz dobljenih", String(st.nizZ), `niz izgubljenih ${st.nizP}`),
       tile("Povp. trajanje", trajanjeBes(st.trajanje), "od odprtja do zaprtja")),
     ugotovitve.length ? h("div", { class: "insight" }, h("b", {}, "Kdaj vama gre najbolje"), h("ul", {}, ugotovitve.map((u) => h("li", {}, u)))) : null,
+    nasvet.skodi.length || nasvet.pomaga.length ? h("div", { class: "coach" },
+      h("div", { class: "coach-col" }, h("b", {}, "Kaj vama škodi"), nasvet.skodi.length ? h("ul", {}, nasvet.skodi.map((u) => h("li", {}, u))) : h("p", { class: "dim small" }, "Nič izrazitega.")),
+      h("div", { class: "coach-col dobro" }, h("b", {}, "Kaj vama pomaga"), nasvet.pomaga.length ? h("ul", {}, nasvet.pomaga.map((u) => h("li", {}, u))) : h("p", { class: "dim small" }, "Še premalo podatkov."))) : null,
+    teden.ta.n || teden.prej.n ? h("div", { class: "chart" }, h("h3", {}, "Tedenski pregled"),
+      tabela(["", "Trejdi", "Uspešnost", "PF", "Rezultat"], [["Zadnjih 7 dni", String(teden.ta.n), odstotek(teden.ta.wr), pf(teden.ta.pf), pnl(teden.ta.p)], ["Prejšnjih 7 dni", String(teden.prej.n), odstotek(teden.prej.wr), pf(teden.prej.pf), pnl(teden.prej.p)]])) : null,
     graf("Krivulja kapitala", krivulja(st.krivulja), "Seštevek rezultatov skozi čas"),
     graf("Rezultat po dnevih", stolpci(zadnjiDnevi.map((d) => ({ oznaka: d.k.slice(8) + "." + d.k.slice(5, 7), v: d.p, opis: `${datum(d.k)}: ${evri(d.p)}, ${d.n} trejdov` })), { oznakeVsakih: Math.ceil(zadnjiDnevi.length / 10) }),
       st.dnevi.length > 60 ? "Zadnjih 60 dni trgovanja" : null),
     graf("Po mesecih", stolpci(mes, { oznakeVsakih: Math.ceil(mes.length / 12) })),
     graf("Po dnevih v tednu", stolpci(tedni.map((d) => ({ oznaka: DNEVI[d.k], v: d.p, opis: `${DNEVI[d.k]}: ${evri(d.p)}, ${d.n} trejdov, uspešnost ${odstotek(d.wr)}` })))),
     graf("Po urah dneva", stolpci(ure.map((u) => ({ oznaka: String(u.k), v: u.p, opis: `${u.k}:00: ${evri(u.p)}, ${u.n} trejdov` })), { oznakeVsakih: ure.length > 12 ? 2 : 1 }), "Čas po uri te naprave"),
+    graf("Toplotna karta: dan × ura", toplota(an.toplota, DNEVI), "Zeleno = dobiček, rdeče = izguba, močnejša barva = večji znesek. Ura vstopa po času te naprave."),
+    graf("Po sejah", stolpci(an.seje.map((x) => ({ oznaka: x.ime, v: x.p, opis: `${x.ime}: ${evri(x.p)}, ${x.n} trejdov, uspešnost ${odstotek(x.wr)}` }))), "Čas New York: Azija 18–03, London 03–08, New York 08–17"),
+    h("div", { class: "chart" }, h("h3", {}, "Killzone (ICT)"), h("div", { class: "note" }, "Čas New York: Asia 20–24, London 2–5, NY AM 8:30–11, kosilo 12–13:30, NY PM 13:30–16"),
+      tabela(["Okno", "Trejdi", "Uspešnost", "PF", "Rezultat"], [...an.killzone.filter((x) => x.n).map(vrsticaSkupine), vrsticaSkupine({ ime: "Izven killzon", ...an.izvenKz })])),
+    h("div", { class: "chart" }, h("h3", {}, "Izvedba"),
+      h("div", { class: "tiles" },
+        tile("Držanje dobitkov", trajanjeKratko(an.izvedba.dobitki), `povprečje ${trajanjeKratko(an.izvedba.povpDobitki)}`),
+        tile("Držanje izgub", trajanjeKratko(an.izvedba.izgube), `povprečje ${trajanjeKratko(an.izvedba.povpIzgube)}`),
+        tile("Po izgubi (≤ 15 min)", pnl(an.poIzgubi.p), `${an.poIzgubi.n} trejdov · ${odstotek(an.poIzgubi.wr)}`),
+        tile("Po dobitku (≤ 15 min)", pnl(an.poDobitku.p), `${an.poDobitku.n} trejdov · ${odstotek(an.poDobitku.wr)}`)),
+      an.poTrajanju.length ? tabela(["Trajanje", "Trejdi", "Uspešnost", "PF", "Rezultat"], an.poTrajanju.map(vrsticaSkupine)) : null),
+    h("div", { class: "chart" }, h("h3", {}, "Konsistenca in overtrading"),
+      h("div", { class: "tiles" },
+        tile("Najboljši dan", odstotek(k.najDanDelez), k.najDan ? `od dobička · ${datum(k.najDan.k)}` : "od dobička"),
+        tile("Top 3 dnevi", odstotek(k.top3Delez), "delež vsega dobička"),
+        tile("Nihanje na dan", evri(k.std), `povprečje ${evri(k.povpDan)} · razmerje ${k.sharpeDan.toFixed(2)}`),
+        tile("Trejdov na dan", k.povpTrejdov.toFixed(1).replace(".", ","), `največ ${k.maxTrejdov}`)),
+      tabela(["Trejd v dnevu", "Trejdi", "Uspešnost", "PF", "Rezultat"], an.zapStevilka.map(vrsticaSkupine))),
+    simKartica,
+    h("p", { class: "fine" }, "MAE/MFE in dejanski risk/reward potrebujeta podatke o stop lossu in gibanju cene med trejdom, ki jih izvozi ne vsebujejo."),
     st.simboli.length ? graf("Po instrumentih", stolpci(st.simboli.slice(0, 12).map((x) => ({ oznaka: x.k.slice(0, 7), v: x.p, opis: `${x.k}: ${evri(x.p)}, ${x.n} trejdov` })))) : null,
     st.simboli.length ? h("div", { class: "chart" }, h("h3", {}, "Instrumenti"),
       tabela(["Instrument", "Trejdi", "Uspešnost", "Rezultat"], st.simboli.map((x) => [x.k, String(x.n), odstotek(x.wr), pnl(x.p)]))) : null,
@@ -946,7 +1003,7 @@ function uvoziTrejde(datoteka) {
     h("label", {}, "Algoritem (neobvezno, npr. ime EA)",
       h("input", { list: "algoritmi", placeholder: "Prazno = ročno trgovanje ali iz stolpca Magic/Comment", oninput: (e) => (algo = e.target.value) }),
       h("datalist", { id: "algoritmi" }, znaniAlgo.map((a) => h("option", { value: a })))),
-    h("p", { class: "muted small" }, "Datoteka: CSV, Excel (xlsx) ali HTML poročilo. MetaTrader 5: Zgodovina › desni klik › Poročilo. AMP: Trade/Fill report. Bitonex: Zgodovina › Izvozi. Topstep: Trades › Export."),
+    h("p", { class: "muted small" }, "Datoteka: CSV, Excel (xlsx) ali HTML poročilo. MetaTrader 5: Zgodovina › desni klik › Poročilo. AMP: Trade/Fill report. Bitunix: Zgodovina › Izvozi. Topstep: Trades › Export."),
     izbira,
     h("button", { class: "btn ghost", onclick: () => izbira.click() }, "Izberi datoteko"),
     predogled,
@@ -962,7 +1019,7 @@ function meniDodaj() {
   const s = list([
     h("div", { class: "row between" }, h("h1", {}, "Dodaj"), h("button", { class: "iconbtn", "aria-label": "Zapri", onclick: () => (s.remove(), seznam()) }, ikona("zapri"))),
     moznost("prenos", "Naloži datoteke", "Pogodbe, licence, računi, potrdila o izplačilih, maili (PDF, slike …)", () => nalozi()),
-    moznost("trend", "Uvozi zgodovino trejdov", "Izvoz iz MT5, AMP ali Bitonexa za statistiko", () => uvoziTrejde()),
+    moznost("trend", "Uvozi zgodovino trejdov", "Izvoz iz MT5, AMP Bitunixa ali Topstepa za statistiko", () => uvoziTrejde()),
     moznost("pero", "Nov vnos", "Geslo, račun, podatki ali opomba", () => uredi(null)),
   ], seznam);
 }
