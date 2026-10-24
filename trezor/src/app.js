@@ -808,8 +808,8 @@ async function remakoZaslon() {
   const kumul = (a) => { let v = 0; return a.map((t) => ({ t: t.t, v: Math.round((v += t.p) * 100) / 100 })); };
   const serije = [{ ime: "REMAKO", cls: "s-skupaj", tocke: kumul(trejdi) }, ...ljudje.map((k) => ({ ime: k, cls: cls(k), tocke: kumul(trejdi.filter((t) => t.k === k)) }))];
   const legenda = (imena) => h("div", { class: "legenda" }, imena.map(([ime, c]) => h("span", { class: c }, ime)));
-  const legendaVsi = legenda([["REMAKO skupaj", "s-skupaj"], ...ljudje.map((k) => [k, cls(k)])]);
-  const legendaLjudje = legenda(ljudje.map((k) => [k, cls(k)]));
+  const legendaVsiF = () => legenda([["REMAKO skupaj", "s-skupaj"], ...ljudje.map((k) => [k, cls(k)])]);
+  const legendaLjudjeF = () => legenda(ljudje.map((k) => [k, cls(k)]));
 
   // Padec od vrha (skupaj)
   let vrh = 0, kap = 0;
@@ -870,21 +870,21 @@ async function remakoZaslon() {
         iskrica(kumul(trejdi.filter((t) => t.k === k)), poOsebi[k].neto >= 0 ? "plus" : "minus")))),
       h("div", { class: "coach tri" }, nasvetiStolpec("Kaj je dobro", "dobro", dobro), nasvetiStolpec("Kaj izboljšati", "srednje", izboljsaj), nasvetiStolpec("Kaj je slabo", "", slabo)),
       h("div", { class: "mreza dve" },
-        h("div", { class: "chart" }, h("h3", {}, "Krivulja kapitala"), legendaVsi, vecKrivulj(serije)),
+        h("div", { class: "chart" }, h("h3", {}, "Krivulja kapitala"), legendaVsiF(), vecKrivulj(serije)),
         graf("Koledar", koledar(poDnevu), "Dnevni rezultat REMAKO, zadnjih 12 tednov")),
     ],
     profit: () => [obdobjeIzbira,
       h("div", { class: "mreza dve" },
-        h("div", { class: "chart" }, h("h3", {}, `Profit po ${imeObd}`), legendaLjudje,
+        h("div", { class: "chart" }, h("h3", {}, `Profit po ${imeObd}`), legendaLjudjeF(),
           nalozeniStolpci(obdobja.map(OZNAKA[remakoObdobje]), ljudje.map((k) => ({ ime: k, cls: cls(k), v: obdobja.map((o) => vsota(skupine.get(o).filter((t) => t.k === k))) })), { oznakeVsakih: oznakeVs })),
         graf(`Skupaj po ${imeObd}`, stolpci(obdobja.map((o) => ({ oznaka: OZNAKA[remakoObdobje](o), v: vsota(skupine.get(o)), opis: `${o}: ${evri(vsota(skupine.get(o)))}, ${skupine.get(o).length} trejdov` })), { oznakeVsakih: oznakeVs }))),
       h("div", { class: "mreza dve" },
-        h("div", { class: "chart" }, h("h3", {}, "Delež dobička"), legendaLjudje, krof(ljudje.map((k) => ({ ime: k, cls: cls(k), v: poOsebi[k].neto })), evri(st.neto))),
-        graf("Padec od vrha", krivulja(podvodno, { visina: 170 }), `Največji padec ${evri(st.maxDD)}`)),
+        h("div", { class: "chart" }, h("h3", {}, "Delež dobička"), legendaLjudjeF(), krof(ljudje.map((k) => ({ ime: k, cls: cls(k), v: poOsebi[k].neto })), kratkoSt(st.neto) + " €")),
+        graf("Padec od vrha", krivulja(podvodno, { visina: 170, barva: "minus" }), `Največji padec ${evri(st.maxDD)}`)),
     ],
     uspesnost: () => [obdobjeIzbira,
       h("div", { class: "mreza dve" },
-        h("div", { class: "chart" }, h("h3", {}, `Uspešnost po ${imeObd}`), legendaVsi,
+        h("div", { class: "chart" }, h("h3", {}, `Uspešnost po ${imeObd}`), legendaVsiF(),
           vecKrivulj([{ cls: "s-skupaj", tocke: obdobja.map((o) => ({ t: o.length === 7 ? o + "-15" : o, v: Math.round(wr(skupine.get(o)) * 100) })) },
             ...ljudje.map((k) => ({ cls: cls(k), tocke: obdobja.filter((o) => skupine.get(o).some((t) => t.k === k)).map((o) => ({ t: o.length === 7 ? o + "-15" : o, v: Math.round(wr(skupine.get(o).filter((t) => t.k === k)) * 100) })) }))], { visina: 200, enota: " %" })),
         graf("Porazdelitev rezultatov trejdov", stolpci(kosi.map((x) => ({ oznaka: kratkoSt(x.od), v: x.n, opis: `${evri(x.od)} do ${evri(x.od + korak)}: ${x.n} trejdov` })), { oznakeVsakih: 3 }), "Koliko trejdov je padlo v posamezen razpon")),
@@ -893,9 +893,9 @@ async function remakoZaslon() {
     ],
     cas: () => [
       h("div", { class: "mreza dve" },
-        h("div", { class: "chart" }, h("h3", {}, "Po dnevih v tednu"), legendaLjudje,
+        h("div", { class: "chart" }, h("h3", {}, "Po dnevih v tednu"), legendaLjudjeF(),
           nalozeniStolpci(DNEVI, ljudje.map((k) => ({ ime: k, cls: cls(k), v: DNEVI.map((_, d) => vsota(trejdi.filter((t) => t.k === k && (new Date(t.t).getDay() + 6) % 7 === d))) })))),
-        h("div", { class: "chart" }, h("h3", {}, "Po urah dneva"), legendaLjudje,
+        h("div", { class: "chart" }, h("h3", {}, "Po urah dneva"), legendaLjudjeF(),
           nalozeniStolpci(Array.from({ length: 24 }, (_, u) => String(u)), ljudje.map((k) => ({ ime: k, cls: cls(k), v: Array.from({ length: 24 }, (_, u) => vsota(trejdi.filter((t) => t.k === k && new Date(t.t).getHours() === u))) })), { oznakeVsakih: 3 }))),
       graf("Toplotna karta: dan × ura", toplota(napredno(trejdi).toplota, DNEVI), "REMAKO skupaj, ura vstopa"),
     ],

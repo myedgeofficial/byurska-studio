@@ -13,8 +13,8 @@ const kratko = (v) => {
   return (v < 0 ? "−" : "") + t;
 };
 
-export function krivulja(tocke, { visina = 200 } = {}) {
-  const W = 640, H = visina, L = 44, R = 8, T = 10, B = 22;
+export function krivulja(tocke, { visina = 200, barva: vsiljena } = {}) {
+  const W = 640, H = visina, L = 62, R = 8, T = 14, B = 34;
   if (tocke.length < 2) return s("svg", { viewBox: `0 0 ${W} 60`, class: "graf" }, s("text", { x: W / 2, y: 34, "text-anchor": "middle", class: "g-os" }, "Premalo podatkov za graf"));
   const vals = [0, ...tocke.map((t) => t.v)];
   const min = Math.min(...vals), max = Math.max(...vals), raz = max - min || 1;
@@ -22,7 +22,7 @@ export function krivulja(tocke, { visina = 200 } = {}) {
   const y = (v) => T + (1 - (v - min) / raz) * (H - T - B);
   const pot = tocke.map((t, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(t.v).toFixed(1)}`).join("");
   const zadnja = tocke[tocke.length - 1].v;
-  const barva = zadnja >= 0 ? "plus" : "minus";
+  const barva = vsiljena || (zadnja >= 0 ? "plus" : "minus");
   const mreza = [min, (min + max) / 2, max].map((v) => [s("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), class: "g-mreza" }), s("text", { x: L - 6, y: y(v) + 4, "text-anchor": "end", class: "g-os" }, kratko(v))]);
   const d1 = new Date(tocke[0].t).toLocaleDateString("sl-SI"), d2 = new Date(tocke[tocke.length - 1].t).toLocaleDateString("sl-SI");
   return s("svg", { viewBox: `0 0 ${W} ${H}`, class: "graf", role: "img", "aria-label": "Krivulja kapitala" },
@@ -36,7 +36,7 @@ export function krivulja(tocke, { visina = 200 } = {}) {
 
 // stolpci: [{ oznaka, v, opis }]
 export function stolpci(podatki, { visina = 170, oznakeVsakih = 1 } = {}) {
-  const W = 640, H = visina, L = 44, R = 6, T = 10, B = 22;
+  const W = 640, H = visina, L = 62, R = 6, T = 14, B = 34;
   if (!podatki.length) return s("svg", { viewBox: `0 0 ${W} 60`, class: "graf" }, s("text", { x: W / 2, y: 34, "text-anchor": "middle", class: "g-os" }, "Ni podatkov"));
   const vals = [0, ...podatki.map((p) => p.v)];
   const min = Math.min(...vals), max = Math.max(...vals), raz = max - min || 1;
@@ -60,9 +60,9 @@ export function toplota(celice, dnevi) {
   const ure = [];
   for (let u = 0; u < 24; u++) if (celice.some((d) => d[u].n)) ure.push(u);
   if (!ure.length) return s("svg", { viewBox: "0 0 640 60", class: "graf" }, s("text", { x: 320, y: 34, "text-anchor": "middle", class: "g-os" }, "Ni podatkov"));
-  const L = 34, T = 4, B = 20, W = 640, cw = (W - L - 4) / ure.length, ch = 24, H = T + 7 * ch + B;
+  const L = 50, T = 4, B = 30, W = 640, cw = (W - L - 4) / ure.length, ch = 30, H = T + 7 * ch + B;
   const max = Math.max(...celice.flat().map((c) => Math.abs(c.p)), 1);
-  return s("svg", { viewBox: `0 0 ${W} ${H}`, class: "graf", role: "img", "aria-label": "Toplotna karta" },
+  return s("svg", { viewBox: `0 0 ${W} ${H}`, class: "graf toplota", role: "img", "aria-label": "Toplotna karta" },
     dnevi.map((ime, d) => [
       s("text", { x: L - 6, y: T + d * ch + ch / 2 + 4, "text-anchor": "end", class: "g-os" }, ime),
       ure.map((u, i) => {
@@ -79,7 +79,7 @@ const meje = (vals) => { const min = Math.min(0, ...vals), max = Math.max(0, ...
 
 // Več krivulj na enem grafu. serije: [{ ime, cls, tocke: [{ t, v }] }], vse z istimi ali različnimi časi.
 export function vecKrivulj(serije, { visina = 220, enota = "" } = {}) {
-  const W = 640, H = visina, L = 46, R = 8, T = 10, B = 22;
+  const W = 640, H = visina, L = 62, R = 8, T = 14, B = 34;
   const vse = serije.flatMap((x) => x.tocke);
   if (vse.length < 2) return s("svg", { viewBox: `0 0 ${W} 60`, class: "graf" }, s("text", { x: W / 2, y: 34, "text-anchor": "middle", class: "g-os" }, "Premalo podatkov za graf"));
   const casi = vse.map((p) => new Date(p.t).getTime());
@@ -97,7 +97,7 @@ export function vecKrivulj(serije, { visina = 220, enota = "" } = {}) {
 
 // Naloženi stolpci: oznake [..], serije [{ ime, cls, v: [..] }]; pozitivni gredo navzgor, negativni navzdol.
 export function nalozeniStolpci(oznake, serije, { visina = 190, oznakeVsakih = 1 } = {}) {
-  const W = 640, H = visina, L = 46, R = 6, T = 10, B = 22;
+  const W = 640, H = visina, L = 62, R = 6, T = 14, B = 34;
   if (!oznake.length) return s("svg", { viewBox: `0 0 ${W} 60`, class: "graf" }, s("text", { x: W / 2, y: 34, "text-anchor": "middle", class: "g-os" }, "Ni podatkov"));
   const gor = oznake.map((_, i) => serije.reduce((a, sr) => a + Math.max(0, sr.v[i] || 0), 0));
   const dol = oznake.map((_, i) => serije.reduce((a, sr) => a + Math.min(0, sr.v[i] || 0), 0));
