@@ -8,7 +8,6 @@ import { izKode, zakleni, odkleni, mocKode, novoGeslo, NAJMANJ_ZNAKOV } from "./
 /* global FB_CONFIG */
 const db = initializeFirestore(initializeApp(FB_CONFIG), { ignoreUndefinedProperties: true });
 if (location.hostname === "localhost") connectFirestoreEmulator(db, "127.0.0.1", 8080); // samo za preizkus
-const ZAKLENI_PO_MIN = 10;
 const KATEGORIJE = [
   ["gesla", "Gesla"],
   ["podjetje", "Podjetje"],
@@ -186,7 +185,6 @@ function odprt() {
       console.error(e);
     }
   });
-  budnost();
   seznam();
 }
 
@@ -212,21 +210,6 @@ function zakleni_(sporocilo) {
   podatki = null;
   document.querySelectorAll(".sheet").forEach((s) => s.remove());
   zaklenjeno(sporocilo);
-}
-
-let casovnik = null;
-function budnost() {
-  const ponastavi = () => {
-    clearTimeout(casovnik);
-    if (trezor) casovnik = setTimeout(() => zakleni_("Trezor se je zaklenil zaradi neaktivnosti."), ZAKLENI_PO_MIN * 60000);
-  };
-  ["pointerdown", "keydown", "scroll", "touchstart"].forEach((e) => window.addEventListener(e, ponastavi, { passive: true }));
-  let skrito = 0;
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) skrito = Date.now();
-    else if (trezor && skrito && Date.now() - skrito > 3 * 60000) zakleni_("Trezor se je zaklenil, ker je bil v ozadju.");
-  });
-  ponastavi();
 }
 
 const ujema = (v, q) =>
@@ -460,7 +443,8 @@ function nastavitve() {
         },
       },
       h("div", { class: "row between" }, h("h1", {}, "Nastavitve"), h("button", { class: "iconbtn", type: "button", "aria-label": "Zapri", onclick: () => (s.remove(), seznam()) }, "✕")),
-      h("p", { class: "muted" }, `Trezor se sam zaklene po ${ZAKLENI_PO_MIN} minutah neaktivnosti ali ko je 3 minute v ozadju. Kopirana vsebina se iz odložišča pobriše po 45 sekundah.`),
+      h("p", { class: "muted" }, "Trezor ostane odklenjen, dokler ne zapreš strani ali klikneš ključavnico. Kopirana vsebina se iz odložišča pobriše po 45 sekundah."),
+      varnostnaKopija(),
       h("h2", {}, "Zamenjaj kodo"),
       h("p", { class: "muted" }, "Po zamenjavi stara koda ne deluje več, tudi na drugih napravah."),
       nova,
@@ -469,6 +453,57 @@ function nastavitve() {
       gumb
     ),
     seznam
+  );
+}
+
+// Šifrirana kopija v datoteki: odpre se samo s kodo, ki je veljala ob prenosu.
+function varnostnaKopija() {
+  const datoteka = h("input", { type: "file", accept: ".json,application/json" });
+  const koda = h("input", { type: "password", autocomplete: "off", placeholder: "Koda, ki je veljala ob prenosu kopije" });
+  const sporocilo = h("p", { class: "err" });
+  return h(
+    "div",
+    {},
+    h("h2", {}, "Varnostna kopija"),
+    h("p", { class: "muted" }, "Prenesi šifrirano kopijo in jo shrani na varno (npr. iCloud, Google Drive, USB). Odpre se samo s kodo, zato je varna tudi, če jo kdo najde."),
+    h("button", {
+      class: "btn ghost",
+      type: "button",
+      onclick: async () => {
+        const kopija = { aplikacija: "remako-trezor", razlicica: 1, ustvarjeno: new Date().toISOString(), id: trezor.id, ...(await zakleni(trezor, podatki)) };
+        const a = h("a", { href: URL.createObjectURL(new Blob([JSON.stringify(kopija)], { type: "application/json" })), download: `remako-trezor-${kopija.ustvarjeno.slice(0, 10)}.json` });
+        document.body.append(a);
+        a.click();
+        a.remove();
+        obvestilo("Kopija prenesena");
+      },
+    }, "Prenesi varnostno kopijo"),
+    h("label", {}, "Obnovi iz kopije (doda vnose, ki jih v trezorju ni)"),
+    datoteka,
+    koda,
+    sporocilo,
+    h("button", {
+      class: "btn ghost",
+      type: "button",
+      onclick: async () => {
+        sporocilo.textContent = "";
+        try {
+          const kopija = JSON.parse(await datoteka.files[0].text());
+          const t = await izKode(koda.value);
+          if (t.id !== kopija.id) return (sporocilo.textContent = "Koda ne ustreza tej kopiji.");
+          const iz = await odkleni(t, kopija);
+          let n = 0;
+          await spremeni((d) => {
+            const imamo = new Set(d.vnosi.map((v) => v.id));
+            for (const v of iz.vnosi || []) if (!imamo.has(v.id)) (d.vnosi.push(v), n++);
+          });
+          obvestilo(`Obnovljenih vnosov: ${n}`);
+        } catch (err) {
+          console.error(err);
+          sporocilo.textContent = "Kopije ni bilo mogoče odpreti.";
+        }
+      },
+    }, "Obnovi")
   );
 }
 
