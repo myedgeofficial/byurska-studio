@@ -7,7 +7,7 @@
       {
         "source": "**",
         "headers": [
-          { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://firestore.googleapis.com https://firebasestorage.googleapis.com blob:; frame-src blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'" },
+          { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' https://apis.google.com; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://firestore.googleapis.com https://firebasestorage.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://apis.google.com blob:; frame-src blob: https://byurska-studio.firebaseapp.com https://accounts.google.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'" },
           { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
           { "key": "Referrer-Policy", "value": "no-referrer" },
           { "key": "X-Content-Type-Options", "value": "nosniff" },

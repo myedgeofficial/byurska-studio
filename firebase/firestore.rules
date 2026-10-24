@@ -28,9 +28,14 @@ service cloud.firestore {
     // REMAKO trezor (spletna stran trezor/): en dokument s šifrirano vsebino.
     // Ime dokumenta (64 hex znakov) nastane iz kode, zato ga pozna samo, kdor ima kodo.
     // Seznam dokumentov ni dovoljen nikomur; podatki so šifrirani v brskalniku.
+    // Do REMAKO banke/trezorja sme samo Teo ali Tim, prijavljen z Google računom (2FA na Googlu).
+    function bankir() {
+      return request.auth != null && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in ['teo.simonic7@gmail.com', 'tim.petrovic@gmail.com'];
+    }
     match /trezor/{id} {
       function imeOk() {
-        return id.matches('^[0-9a-f]{64}$');
+        return bankir() && id.matches('^[0-9a-f]{64}$');
       }
       function vsebinaOk() {
         let d = request.resource.data;
@@ -46,8 +51,8 @@ service cloud.firestore {
     }
     // Javna oznaka, da trezor obstaja (stran potem ob napačni kodi ne ponudi novega trezorja).
     match /trezor-stanje/obstaja {
-      allow get: if true;
-      allow create, update: if request.resource.data.keys().hasOnly(['obstaja']) && request.resource.data.obstaja == true;
+      allow get: if bankir();
+      allow create, update: if bankir() && request.resource.data.keys().hasOnly(['obstaja']) && request.resource.data.obstaja == true;
     }
   }
 }

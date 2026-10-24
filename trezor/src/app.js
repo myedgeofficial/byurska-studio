@@ -4,6 +4,7 @@
 import { initializeApp } from "firebase/app";
 import { initializeFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, onSnapshot, runTransaction, serverTimestamp } from "firebase/firestore";
 import { getStorage, connectStorageEmulator, ref as sref, uploadBytes, getBytes, deleteObject } from "firebase/storage";
+import { getAuth, connectAuthEmulator, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "firebase/auth";
 import { read as beriTabelo, utils as tabelaUtils } from "xlsx";
 import { najdiTabelo, vTrejde, ugani, statistika as izracunaj, kljucTrejda, DNEVI, MESECI } from "./trejdi.js";
 import { krivulja, stolpci, toplota, vecKrivulj, nalozeniStolpci, krof, koledar, obroc, merilnik, iskrica, trak } from "./grafi.js";
@@ -16,11 +17,16 @@ import { izKode, zakleni, odkleni, mocKode, novoGeslo, NAJMANJ_ZNAKOV, zakleniDa
 const fbApp = initializeApp(FB_CONFIG);
 const db = initializeFirestore(fbApp, { ignoreUndefinedProperties: true });
 const shramba = getStorage(fbApp);
+const avt = getAuth(fbApp);
 if (location.hostname === "localhost") {
   // samo za preizkus
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
   connectStorageEmulator(shramba, "127.0.0.1", 9199);
+  connectAuthEmulator(avt, "http://127.0.0.1:9099", { disableWarnings: true });
 }
+// Prvi korak: prijava z Google računom. Baza (pravila) dovoli samo ta dva naslova; tukaj samo za prijazno sporočilo.
+const DOVOLJENI = ["teo.simonic7@gmail.com", "tim.petrovic@gmail.com"];
+const dovoljen = (u) => !!u && u.emailVerified && DOVOLJENI.includes(String(u.email || "").toLowerCase());
 const NAJVEC_MB = 25;
 const KATEGORIJE = [
   ["gesla", "Gesla"],
@@ -122,6 +128,35 @@ const glava = (...desno) =>
 
 /* ---------- Zaklenjeno ---------- */
 
+function prijava(sporocilo) {
+  const gumb = h("button", { class: "btn", type: "button", onclick: async () => {
+    gumb.disabled = true;
+    try {
+      const ponudnik = new GoogleAuthProvider();
+      ponudnik.setCustomParameters({ prompt: "select_account" });
+      await signInWithPopup(avt, ponudnik);
+    } catch (e) {
+      console.error(e);
+      gumb.disabled = false;
+      zamenjaj(napaka, e.code === "auth/popup-closed-by-user" ? "" : "Prijava ni uspela. Poskusi znova.");
+    }
+  } }, ikona("scit"), "Prijava z Google");
+  const napaka = h("p", { class: "err" }, sporocilo || "");
+  zaslon(glava(), h("div", { class: "card narrow glass login" },
+    h("div", { class: "seal" }, h("div", { class: "seal-ring" }), ikona("scit")),
+    h("h1", {}, "REMAKO banka"),
+    h("p", { class: "muted" }, "Dostop imata samo Teo in Tim. Najprej Google prijava (z 2FA na telefonu), nato koda trezorja."),
+    napaka, gumb,
+    h("p", { class: "fine" }, "Na tej napravi se Google prijava zapomni, koda trezorja pa se vpiše ob vsakem odprtju.")));
+}
+
+function brezDostopa(u) {
+  zaslon(glava(), h("div", { class: "card narrow glass login" },
+    h("h1", {}, "Ni dostopa"),
+    h("p", { class: "muted" }, `Račun ${u.email || ""} nima dostopa do REMAKO banke.`),
+    h("button", { class: "btn", type: "button", onclick: () => signOut(avt) }, "Prijava z drugim računom")));
+}
+
 function zaklenjeno(sporocilo) {
   const vnos = h("input", { type: "password", id: "koda", autocomplete: "current-password", placeholder: "Koda", autofocus: true });
   const napaka = h("p", { class: "err" }, sporocilo || "");
@@ -173,7 +208,8 @@ function zaklenjeno(sporocilo) {
       if (!confirm("Nov trezor naredi samo, če je stara koda izgubljena. Stari trezor ostane, a brez kode ga ni mogoče odpreti. Nadaljujem?")) return;
       novDovoljen = true;
       napaka.textContent = "Vpiši novo kodo in klikni Odkleni.";
-    } }, "Pozabljena koda? Ustvari nov trezor")
+    } }, "Pozabljena koda? Ustvari nov trezor"),
+    avt.currentUser ? h("button", { class: "linkbtn", type: "button", onclick: () => signOut(avt) }, `Odjava (${avt.currentUser.email})`) : null
   );
   zaslon(glava(), obrazec);
   vnos.focus();
@@ -1541,4 +1577,11 @@ function varnostnaKopija() {
   );
 }
 
-zaklenjeno();
+let zadnjiUporabnik;
+onAuthStateChanged(avt, (u) => {
+  const prej = zadnjiUporabnik;
+  zadnjiUporabnik = u ? u.uid : null;
+  if (!u) { if (trezor) zakleni_(); return prijava(); }
+  if (!dovoljen(u)) return brezDostopa(u);
+  if (!trezor && prej !== u.uid) zaklenjeno();
+});

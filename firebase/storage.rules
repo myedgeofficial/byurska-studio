@@ -15,9 +15,13 @@ service firebase.storage {
     }
     // REMAKO trezor: šifrirane priponke in zgodovina trejdov. Ime mape nastane iz kode trezorja,
     // seznam ni dovoljen, vsebina je šifrirana v brskalniku.
+    function bankir() {
+      return request.auth != null && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in ['teo.simonic7@gmail.com', 'tim.petrovic@gmail.com'];
+    }
     match /trezor/{tid}/{fid} {
-      allow get, delete: if tid.matches('^[0-9a-f]{64}$');
-      allow create: if tid.matches('^[0-9a-f]{64}$') && fid.matches('^[0-9a-f-]{36}$')
+      allow get, delete: if bankir() && tid.matches('^[0-9a-f]{64}$');
+      allow create: if bankir() && tid.matches('^[0-9a-f]{64}$') && fid.matches('^[0-9a-f-]{36}$')
         && request.resource.size < 30 * 1024 * 1024;
     }
     match /mape/{vse=**} {

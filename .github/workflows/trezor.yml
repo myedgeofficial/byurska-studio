@@ -6,7 +6,7 @@ name: REMAKO trezor
 on:
   push:
     branches: [main, claude/project-thread-8f8pkn]
-    paths: ["trezor/**", "firebase/firestore.rules", ".github/workflows/trezor.yml"]
+    paths: ["trezor/**", "firebase/firestore.rules", "firebase/storage.rules", ".github/workflows/trezor.yml"]
   workflow_dispatch:
 
 concurrency:
@@ -80,6 +80,24 @@ jobs:
                       print("ZAPIS:", zbirka.get("domainName"), z.get("type"), z.get("rdata"), "->", z.get("requiredAction", "ADD"))
           if d.get("error"): print("NAPAKA:", json.dumps(d["error"]))
           PY
+          # Google prijava: stran in domena morata biti med dovoljenimi domenami za Firebase Auth.
+          IDT="https://identitytoolkit.googleapis.com/admin/v2/projects/$P/config"
+          curl -s -H "Authorization: Bearer $TOK" -H "x-goog-user-project: $P" "$IDT" > "$RUNNER_TEMP/auth.json" || true
+          if python3 - "$RUNNER_TEMP/auth.json" "$RUNNER_TEMP/auth-novo.json" "$STRAN.web.app" "$STRAN.firebaseapp.com" "$DOMENA" <<'PY'
+          import json, sys
+          d = json.load(open(sys.argv[1]))
+          dom = d.get("authorizedDomains")
+          # Brez obstoječega seznama ne pišemo, da ne izbrišemo domen drugih aplikacij (Studio).
+          if not dom: print("Domen za prijavo ni bilo mogoče prebrati:", json.dumps(d)[:300]); sys.exit(1)
+          for x in sys.argv[3:]:
+              if x not in dom: dom.append(x)
+          json.dump({"authorizedDomains": dom}, open(sys.argv[2], "w"))
+          print("Dovoljene domene za prijavo:", ", ".join(dom))
+          PY
+          then
+            curl -s -o /dev/null -w "Posodobitev domen za prijavo: HTTP %{http_code}\n" -X PATCH -H "Authorization: Bearer $TOK" -H "x-goog-user-project: $P" -H "Content-Type: application/json" \
+              -d @"$RUNNER_TEMP/auth-novo.json" "$IDT?updateMask=authorizedDomains" || true
+          fi
           rm -f "$RUNNER_TEMP/sa.json"
 
           # Preveri, da spletni ključ deluje z novega naslova (ključ je lahko omejen na znane strani).
@@ -89,11 +107,11 @@ jobs:
           for i in 1 2 3 4 5 6 7 8; do
             K=$(curl -s -o /tmp/odg.json -w '%{http_code}' -H "Referer: https://$STRAN.web.app/" \
               "https://firestore.googleapis.com/v1/projects/$P/databases/(default)/documents/trezor/$ID?key=$KEY")
-            [ "$K" = "404" ] && break
+            [ "$K" = "403" ] && break
             sleep 15
           done
-          echo "Preizkus baze z novega naslova: HTTP $K (pričakovano 404 = trezor s to kodo ne obstaja)"
-          [ "$K" = "404" ] || { cat /tmp/odg.json; echo "::warning::Baza z naslova $STRAN.web.app ne odgovarja pravilno."; }
+          echo "Preizkus baze brez prijave: HTTP $K (pričakovano 403 = brez Google prijave Teo/Tim ni dostopa)"
+          [ "$K" = "403" ] || { cat /tmp/odg.json; echo "::warning::Baza z naslova $STRAN.web.app ne odgovarja pravilno."; }
           S=$(curl -s -o /dev/null -w '%{http_code}' "https://$STRAN.web.app/")
           echo "Stran: HTTP $S"
           echo "Objavljeno: https://$STRAN.web.app"
