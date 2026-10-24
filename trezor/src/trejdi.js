@@ -38,6 +38,15 @@ export function cas(v) {
   if (typeof v === "number" && v > 1e9) return new Date(v > 1e12 ? v : v * 1000); // unix
   let s = String(v ?? "").trim();
   if (!s || !/\d/.test(s)) return null;
+  // Zamik časovnega pasu na koncu (npr. "+02:00", Topstep): čas pretvorimo v pravi trenutek.
+  const z = s.match(/\d:\d{2}(?::\d{2}(?:\.\d+)?)?\s*(?:[ap]m\s*)?(Z|[+-]\d{2}:?\d{2})$/i);
+  if (z) {
+    const brez = cas(s.slice(0, s.length - z[1].length).trim());
+    if (!brez) return null;
+    const zamik = /z/i.test(z[1]) ? 0 : (z[1][0] === "-" ? -1 : 1) * (+z[1].slice(1, 3) * 60 + +z[1].slice(-2));
+    const utc = Date.UTC(brez.getFullYear(), brez.getMonth(), brez.getDate(), brez.getHours(), brez.getMinutes(), brez.getSeconds());
+    return new Date(utc - zamik * 60000);
+  }
   let m = s.match(/^(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})(?:[ T,]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (m) return new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
   m = s.match(/^(\d{1,2})[.](\d{1,2})[.](\d{4})(?:[ ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
@@ -56,7 +65,7 @@ export function cas(v) {
 export function ugani(glava) {
   const g = glava.map(malo);
   const najdi = (re, izloci) => g.map((h, i) => (re.test(h) && !(izloci && izloci.test(h)) ? i : -1)).filter((i) => i >= 0);
-  const casi = najdi(/time|date|datum|čas/, /zone|frame/);
+  const casi = najdi(/time|date|datum|čas|(entered|exited|opened|closed|filled)_?at$/, /zone|frame|duration/);
   const zapiranje = najdi(/(close|exit|closed|zaprt)/).filter((i) => casi.includes(i));
   const pnl = najdi(NAPIS.pnl, /%|percent|price|cena|gross|rate/);
   const neto = pnl.filter((i) => /net/.test(g[i]));
@@ -68,6 +77,7 @@ export function ugani(glava) {
     kol: najdi(NAPIS.kol, /price|pnl|profit/)[0] ?? -1,
     pnl: neto[0] ?? pnl[pnl.length - 1] ?? -1,
     prov: najdi(NAPIS.prov)[0] ?? -1,
+    provVse: najdi(NAPIS.prov),
     swap: najdi(NAPIS.swap)[0] ?? -1,
     algo: najdi(NAPIS.algo)[0] ?? -1,
   };
@@ -105,7 +115,8 @@ export function vTrejde(vrstice, st) {
     if (!zaprto || pnl == null) continue;
     const smer = malo(r[st.smer]);
     if (NI_TREJD.test(smer) || (st.sym >= 0 && !String(r[st.sym] ?? "").trim() && NI_TREJD.test(malo(r.join(" "))))) continue;
-    const prov = st.prov >= 0 ? stevilo(r[st.prov]) || 0 : 0;
+    // Topstep/ProjectX ima ločena stolpca Fees in Commissions, zato seštejemo vse stolpce s stroški.
+    const prov = (st.provVse || (st.prov >= 0 ? [st.prov] : [])).reduce((v, i) => { const x = stevilo(r[i]) || 0; return v + (x <= 0 ? x : -x); }, 0);
     const swap = st.swap >= 0 ? stevilo(r[st.swap]) || 0 : 0;
     const odprto = st.odprto >= 0 ? cas(r[st.odprto]) : null;
     out.push({
@@ -115,7 +126,7 @@ export function vTrejde(vrstice, st) {
       d: /sell|short|prodaj|^s$/.test(smer) ? "sell" : /buy|long|kupi|^b$/.test(smer) ? "buy" : "",
       q: st.kol >= 0 ? Math.abs(stevilo(r[st.kol]) || 0) : undefined,
       a: st.algo >= 0 && String(r[st.algo] ?? "").trim() ? String(r[st.algo]).trim() : undefined,
-      p: Math.round((st.neto ? pnl : pnl + (prov <= 0 ? prov : -prov) + swap) * 100) / 100,
+      p: Math.round((st.neto ? pnl : pnl + prov + swap) * 100) / 100,
     });
   }
   return out;

@@ -60,3 +60,15 @@ test("CSV z neto P&L in vrsticami pologa", () => {
   assert.equal(s.dnevi.length, 2);
   assert.equal(s.najDan.p, 125);
 });
+
+test("Topstep / ProjectX izvoz (EnteredAt, ExitedAt, Fees + Commissions, časovni pas)", () => {
+  const vr = [
+    ["Id", "ContractName", "EnteredAt", "ExitedAt", "EntryPrice", "ExitPrice", "Fees", "PnL", "Size", "Type", "TradeDay", "TradeDuration", "Commissions"],
+    ["1", "MNQZ6", "10/19/2026 09:39:30 +02:00", "10/19/2026 09:49:09 +02:00", "29764.25", "29746.5", "0.7200", "35.5", "1", "Short", "10/19/2026 00:00:00 -05:00", "00:09:39.03", "0.5000"],
+  ];
+  const t = najdiTabelo(vr);
+  const [x] = vTrejde(t.vrstice, t.stolpci);
+  assert.equal(x.t, "2026-10-19T07:49:09.000Z");
+  assert.equal(x.d, "sell");
+  assert.equal(x.p, 34.28);
+});
