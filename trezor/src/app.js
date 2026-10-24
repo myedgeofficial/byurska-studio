@@ -9,6 +9,7 @@ import { najdiTabelo, vTrejde, ugani, statistika as izracunaj, kljucTrejda, DNEV
 import { krivulja, stolpci, toplota, vecKrivulj, nalozeniStolpci, krof, koledar, obroc, merilnik, iskrica, trak } from "./grafi.js";
 import { napredno, simuliraj, coach, tedenski, trajanje as trajanjeKratko, SEJE } from "./analiza.js";
 import { ikona } from "./ikone.js";
+import { nivo, streha, monitorji, kovanci, roboti, mape, sef, stopnice } from "./banka.js";
 import { izKode, zakleni, odkleni, mocKode, novoGeslo, NAJMANJ_ZNAKOV, zakleniDatoteko, odkleniDatoteko } from "./kripto.js";
 
 /* global FB_CONFIG */
@@ -41,7 +42,7 @@ let podatki = null; // { vnosi: [...] }
 let posodobljeno = null;
 let odjava = null;
 let filter = { kat: "vse", isci: "" };
-let pogled = "trezor"; // ali "statistika"
+let pogled = location.hash === "#remako" ? "remako" : "banka"; // "statistika", "remako" (ločena podstran #remako)
 let statFilter = { racun: "moji", obdobje: "vse", algo: "vsi", vrsta: "zivo" };
 let statOddelek = "pregled", remakoOddelek = "pregled";
 const simPravila = { maxNaDan: 0, stopPoIzgubah: 0, brezSeje: "", samoKz: false };
@@ -78,7 +79,16 @@ function h(tag, lastnosti = {}, ...otroci) {
 }
 // Kot replaceChildren, a preskoči prazne (null, false) in splošči sezname.
 const zamenjaj = (el, ...otroci) => el.replaceChildren(...otroci.flat(Infinity).filter((o) => o != null && o !== false));
-const zaslon = (...vsebina) => (app.classList.toggle("siroko", pogled !== "trezor" && vsebina.some((x) => x?.classList?.contains("tabs"))), zamenjaj(app, ...vsebina));
+const zaslon = (...vsebina) => {
+  const plosca = vsebina.some((x) => x?.classList?.contains("dash"));
+  app.classList.toggle("siroko", (pogled === "statistika" || pogled === "remako") && vsebina.some((x) => x?.classList?.contains("tabs")));
+  app.classList.toggle("dash-mode", plosca);
+  app.classList.toggle("banka-mode", pogled === "banka" && vsebina.some((x) => x?.classList?.contains("banka")));
+  document.body.classList.toggle("dash-body", plosca);
+  if (plosca && location.hash !== "#remako") history.replaceState(null, "", "#remako");
+  if (!plosca && location.hash === "#remako") history.replaceState(null, "", location.pathname);
+  zamenjaj(app, ...vsebina);
+};
 
 function obvestilo(besedilo) {
   const el = h("div", { class: "toast" }, besedilo);
@@ -334,9 +344,9 @@ const ujema = (v, q) =>
 
 function zavihki() {
   return h("div", { class: "tabs" },
+    h("button", { class: pogled === "banka" ? "on" : "", onclick: () => ((pogled = "banka"), seznam()) }, ikona("podjetje"), "Banka"),
     h("button", { class: pogled === "trezor" ? "on" : "", onclick: () => ((pogled = "trezor"), seznam()) }, ikona("scit"), "Trezor"),
-    h("button", { class: pogled === "statistika" ? "on" : "", onclick: () => ((pogled = "statistika"), seznam()) }, ikona("trend"), "Statistika"),
-    h("button", { class: pogled === "remako" ? "on" : "", onclick: () => ((pogled = "remako"), seznam()) }, ikona("podjetje"), "REMAKO"));
+    h("button", { class: pogled === "statistika" ? "on" : "", onclick: () => ((pogled = "statistika"), seznam()) }, ikona("trend"), "Statistika"));
 }
 
 const glavaOdprta = () =>
@@ -346,6 +356,7 @@ const glavaOdprta = () =>
   );
 
 function seznam() {
+  if (pogled === "banka") return bankaZaslon();
   if (pogled === "statistika") return statistikaZaslon();
   if (pogled === "remako") return remakoZaslon();
   const vnosi = [...podatki.vnosi].sort((a, b) =>
@@ -385,6 +396,98 @@ function seznam() {
     h("p", { class: "fine" }, posodobljeno ? `Zadnja sprememba: ${posodobljeno.toLocaleString("sl-SI")}` : ""),
     h("button", { class: "fab", onclick: meniDodaj }, ikona("plus"), "Dodaj")
   );
+}
+
+/* ---------- Banka REMAKO (domača stran v stilu igre) ---------- */
+
+async function bankaZaslon() {
+  const vnosi = podatki.vnosi || [];
+  const uvozi = podatki.uvozi || [];
+  const denar = vnosi.filter((v) => v.kat === "denar");
+  const izplacano = denar.filter((v) => v.smer !== "nakazilo").reduce((a, v) => a + (Number(v.znesek) || 0), 0);
+  const dokumenti = vnosi.filter((v) => v.kat === "dokumenti");
+  const kmalu = dokumenti.filter((v) => v.veljaDo && dniDo(v.veljaDo) <= 30);
+  const stGesel = vnosi.filter((v) => ["gesla", "trgovanje"].includes(v.kat)).length;
+  const stPodatkov = vnosi.filter((v) => ["podjetje", "banka"].includes(v.kat)).length;
+  const telo = h("div", { class: "b-telo" }, h("div", { class: "spin" }));
+  const nivoVrstica = h("div", { class: "b-nivo" });
+  const stavba = h("div", { class: "banka" }, h("div", { class: "b-streha-ovoj" }), h("div", { class: "b-nadstropja" }), telo, stopnice());
+  zaslon(glavaOdprta(), pozdrav(), zavihki(), nivoVrstica, stavba);
+
+  let trejdi = [];
+  try { if (uvozi.length) trejdi = (await naloziTrejde()).filter((t) => t.v === "zivo"); } catch (e) { console.error(e); }
+  if (pogled !== "banka") return;
+  const kdoZa = new Map(uvozi.map((u) => [u.racun, trgovalec(u)]));
+  const zaOsebo = (k) => trejdi.filter((t) => (kdoZa.get(t.r) || "Drugi") === k);
+  const vsota = (a) => Math.round(a.reduce((x, t) => x + t.p, 0) * 100) / 100;
+  const skupaj = vsota(trejdi);
+  const nv = nivo(Math.max(0, skupaj));
+  const teo = zaOsebo("Teo"), tim = zaOsebo("Tim"), algo = zaOsebo("Algoritmi");
+  const pTeo = vsota(teo), pTim = vsota(tim), pAlgo = vsota(algo);
+  const mt5 = vnosi.find((v) => v.kat === "trgovanje" && /metatrader|mt5/i.test(v.naziv));
+  const stAlgo = new Set(algo.map((t) => t.a).filter(Boolean)).size;
+  const kumul = (a) => { let v = 0; return [...a].sort((x, y) => x.t.localeCompare(y.t)).map((t) => ({ t: t.t, v: (v += t.p) })); };
+
+  // Streha in dodatna nadstropja: vsak nivo REMAKO doda eno nadstropje z okni.
+  zamenjaj(stavba.querySelector(".b-streha-ovoj"), streha("REMAKO", nv.n));
+  const nadstropij = Math.max(0, Math.min(nv.n - 2, 8));
+  zamenjaj(stavba.querySelector(".b-nadstropja"), Array.from({ length: nadstropij }, (_, i) =>
+    h("div", { class: "b-okna" }, Array.from({ length: 14 }, (_, j) => h("i", { class: (i * 7 + j * 3) % 5 ? "lucka" : "" })))));
+  zamenjaj(nivoVrstica,
+    h("div", { class: "b-nivo-zn" }, h("b", {}, `Nivo ${nv.n}`), h("span", {}, "REMAKO banka")),
+    h("div", { class: "b-xp" }, h("div", { class: "b-xp-bar" }, h("i", { style: `width:${Math.round(nv.napredek * 100)}%` })),
+      h("div", { class: "b-xp-t" }, h("span", {}, pnl(skupaj)), h("span", {}, nv.doo != null ? `še ${evri(nv.doo - Math.max(0, skupaj))} do nivoja ${nv.n + 1}` : "največji nivo"))));
+
+  const pojdi = (fn) => () => { fn(); seznam(); window.scrollTo(0, 0); };
+  const vStat = (racun) => pojdi(() => { pogled = "statistika"; statOddelek = "pregled"; statFilter.racun = racun; statFilter.algo = "vsi"; statFilter.vrsta = "zivo"; });
+  const vTrezor = (kat) => pojdi(() => { pogled = "trezor"; filter.kat = kat; filter.isci = ""; });
+  const soba = (cls, naslov, oznaka, ilustracija, glavno, pod, n, klik, sirina) => h("button", { class: "soba " + cls, style: sirina ? `flex-grow:${sirina}` : null, onclick: klik },
+    h("div", { class: "soba-vrh" }, h("span", { class: "soba-ime" }, naslov), n ? h("span", { class: "soba-nivo" }, `Nv. ${n.n}`) : h("span", { class: "soba-oz" }, oznaka)),
+    h("div", { class: "soba-ilu" }, ilustracija),
+    h("div", { class: "soba-glavno" }, glavno), h("div", { class: "soba-pod" }, pod),
+    n ? h("div", { class: "soba-xp" }, h("i", { style: `width:${Math.round(n.napredek * 100)}%` })) : null);
+  const nTeo = nivo(Math.max(0, pTeo)), nTim = nivo(Math.max(0, pTim)), nAlgo = nivo(Math.max(0, pAlgo));
+  const delez = (p) => 1 + Math.max(0, p) / Math.max(1, Math.abs(pTeo) + Math.abs(pTim)) * 1.5;
+  const wr = (a) => (a.length ? Math.round((a.filter((t) => t.p > 0).length / a.length) * 100) + " %" : "—");
+
+  // Lastno nadstropje se odklene, ko oseba natrejda PRAG profita. Do takrat dela v lobiju.
+  const PRAG = 5000;
+  const odklenjen = { Teo: pTeo >= PRAG, Tim: pTim >= PRAG, Algoritmi: pAlgo >= PRAG };
+  const zaklenjeno = (ime, p) => h("div", { class: "b-nad zaklenjeno" },
+    h("div", { class: "b-zaklep" }, ikona("kljucavnica"), h("b", {}, `Nadstropje ${ime}`),
+      h("span", {}, `Odklene se pri ${evri(PRAG)} profita · še ${evri(Math.max(0, PRAG - p))}`),
+      h("div", { class: "soba-xp" }, h("i", { style: `width:${Math.round(Math.max(0, Math.min(1, p / PRAG)) * 100)}%` }))));
+  const nadstropje = (ime, oseba, p, a, ilu, pod, klik) => odklenjen[oseba]
+    ? h("div", { class: "b-nad" }, soba("velika s-" + oseba.toLowerCase().slice(0, 4), ime, "", ilu, pnl(p), pod, nivo(p), klik))
+    : zaklenjeno(ime, p);
+  const sobaTeo = soba("s-teo", "Miza Teo", "", monitorji(Math.min(nTeo.n, 2), pTeo >= 0), pnl(pTeo), `${teo.length} trejdov · ${wr(teo)} · AMP`, nTeo, vStat("oseba:Teo"));
+  const sobaTim = soba("s-tim", "Miza Tim", "", monitorji(Math.min(nTim.n, 2), pTim >= 0), pnl(pTim), `${tim.length} trejdov · ${wr(tim)} · Bitunix`, nTim, vStat("oseba:Tim"));
+  const sobaAlgo = soba("s-algo", "Algoritmi MT5", "", roboti(Math.min(stAlgo, 2)), algo.length ? pnl(pAlgo) : "Še ni strategij", algo.length ? `${stAlgo || 1} strategij · ${algo.length} trejdov` : "avtomatsko trgovanje (Teo + Tim)", algo.length ? nAlgo : null, mt5 ? vStat(mt5.naziv) : vStat("vsi"));
+  // Tekoči trak zadnjih trejdov v lobiju
+  const zadnji = [...trejdi].sort((a, b) => b.t.localeCompare(a.t)).slice(0, 24);
+  const tekociTrak = zadnji.length ? h("div", { class: "b-trak" }, h("div", { class: "b-trak-v" }, [...zadnji, ...zadnji].map((t) =>
+    h("span", { class: t.p >= 0 ? "pos" : "neg" }, h("b", {}, kdoZa.get(t.r) || ""), ` ${t.s || ""} `, (t.p >= 0 ? "▲ +" : "▼ ") + evri(t.p))))) : null;
+
+  zamenjaj(telo,
+    h("div", { class: "b-nad" }, soba("velika s-uprava", "Penthouse · Uprava", "REMAKO", h("div", { class: "b-graf" }, iskrica(kumul(trejdi), skupaj >= 0 ? "plus" : "minus")), pnl(skupaj),
+      `${trejdi.length} trejdov · uspešnost ${wr(trejdi)} · skupna statistika Teo + Tim`, null, pojdi(() => { pogled = "remako"; remakoOddelek = "pregled"; }))),
+    nadstropje("Algo lab", "Algoritmi", pAlgo, algo, roboti(stAlgo), `${stAlgo} strategij · ${algo.length} trejdov`, mt5 ? vStat(mt5.naziv) : vStat("vsi")),
+    nadstropje("Trading Tim", "Tim", pTim, tim, monitorji(nTim.n, pTim >= 0), `${tim.length} trejdov · ${wr(tim)} · Bitunix`, vStat("oseba:Tim")),
+    nadstropje("Trading Teo", "Teo", pTeo, teo, monitorji(nTeo.n, pTeo >= 0), `${teo.length} trejdov · ${wr(teo)} · AMP`, vStat("oseba:Teo")),
+    h("div", { class: "b-lobi" },
+      h("div", { class: "b-lobi-napis" }, h("span", {}, "Lobi"), h("small", {}, "vsi začnemo tukaj")),
+      tekociTrak,
+      h("div", { class: "b-lobi-mreza" },
+        odklenjen.Teo ? null : sobaTeo,
+        odklenjen.Tim ? null : sobaTim,
+        odklenjen.Algoritmi ? null : sobaAlgo,
+        soba("s-analitika", "Analitika", "", h("div", { class: "b-graf" }, iskrica(kumul(trejdi).filter((_, i, a) => i % Math.ceil(a.length / 60 || 1) === 0), "plus")), `${uvozi.length} zgodovin`, `${trejdi.length} trejdov · statistika, uvozi, simulator`, null,
+          pojdi(() => { pogled = "statistika"; statOddelek = "instr"; statFilter.racun = "vsi"; })),
+        soba("s-papir", "Papirologija", kmalu.length ? `${kmalu.length} poteka` : "", mape(dokumenti.length), String(dokumenti.length), kmalu.length ? `Kmalu poteče: ${kmalu.map((v) => v.naziv).join(", ")}` : "pogodbe, licence, dovoljenja", null, vTrezor("dokumenti")),
+        soba("s-payout", "Blagajna · payouti", "", kovanci(nivo(izplacano).n), evri(izplacano), `${denar.length} izplačil in nakazil`, null, vTrezor("denar")),
+        soba("s-sef", "Sef · gesla", "", sef(), String(stGesel), "uporabniška imena, gesla, računi", null, vTrezor("gesla")),
+        soba("s-podatki", "Podatki REMAKO", "", ikona("podjetje", "b-ilu-ik"), String(stPodatkov), "naslov, matična, davčna, banka", null, vTrezor("podjetje"))),
+      h("div", { class: "b-vhod" }, h("div", { class: "b-vrata" }), h("span", {}, "REMAKO d.o.o."))));
 }
 
 // Nadzorna plošča na vrhu: kratek pregled trezorja.
@@ -772,8 +875,22 @@ let remakoObdobje = "dan";
 
 async function remakoZaslon() {
   const uvozi = podatki.uvozi || [];
-  const vsebina = h("div", {}, h("div", { class: "spin" }));
-  zaslon(glavaOdprta(), pozdrav(), zavihki(), vsebina);
+  const vsebina = h("div", { class: "dash-vsebina" }, h("div", { class: "spin" }));
+  const ODDELKI = [["pregled", "Pregled", "vse"], ["profit", "Profit", "denar"], ["uspesnost", "Uspešnost", "trend"], ["cas", "Čas", "koledar"], ["primerjava", "Primerjava", "graf"]];
+  const naslov = h("div", { class: "dash-naslov" });
+  const orodja = h("div", { class: "dash-orodja" });
+  zaslon(h("div", { class: "dash" },
+    h("aside", { class: "dash-stran" },
+      h("div", { class: "dash-logo" }, h("span", { class: "mark" }, "R"), h("div", {}, h("b", {}, "REMAKO"), h("small", {}, "Trading desk"))),
+      h("nav", { class: "dash-nav" }, ODDELKI.map(([k, ime, ik]) => h("button", { class: remakoOddelek === k ? "on" : "", onclick: () => ((remakoOddelek = k), seznam()) }, ikona(ik), h("span", {}, ime)))),
+      h("div", { class: "dash-dno" },
+        h("button", { class: "dash-nazaj", onclick: () => ((pogled = "banka"), seznam()) }, ikona("podjetje"), h("span", {}, "Banka")),
+        h("button", { class: "dash-nazaj", onclick: () => ((pogled = "statistika"), seznam()) }, ikona("trend"), h("span", {}, "Osebna statistika")),
+        h("button", { class: "dash-nazaj", onclick: () => ((pogled = "trezor"), seznam()) }, ikona("scit"), h("span", {}, "Trezor")),
+        h("button", { class: "dash-nazaj", onclick: () => zakleni_() }, ikona("kljucavnica"), h("span", {}, "Zakleni")))),
+    h("div", { class: "dash-glavno" }, h("header", { class: "dash-vrh" }, naslov, orodja), vsebina)));
+  const imeOddelka = Object.fromEntries(ODDELKI.map(([k, ime]) => [k, ime]))[remakoOddelek] || "Pregled";
+  zamenjaj(naslov, h("h1", {}, imeOddelka), h("p", {}, "REMAKO d.o.o. · skupno trgovanje"));
   if (!uvozi.length) return zamenjaj(vsebina, h("div", { class: "card" }, h("h1", {}, "REMAKO skupaj"),
     h("p", { class: "muted" }, "Tukaj bo skupna statistika podjetja: Teo + Tim + algoritmi, po dnevih, tednih in mesecih. Najprej uvozita zgodovino trejdov."),
     h("button", { class: "btn", onclick: () => uvoziTrejde() }, "Uvozi zgodovino")));
@@ -853,7 +970,6 @@ async function remakoZaslon() {
   const obdobjeIzbira = h("div", { class: "tabs small tri" }, [["dan", "Dnevno"], ["teden", "Tedensko"], ["mesec", "Mesečno"]].map(([k, ime]) =>
     h("button", { class: remakoObdobje === k ? "on" : "", onclick: () => ((remakoObdobje = k), seznam()) }, ime)));
   const oznakeVs = Math.ceil(obdobja.length / 10);
-  const ODDELKI = [["pregled", "Pregled", "vse"], ["profit", "Profit", "denar"], ["uspesnost", "Uspešnost", "trend"], ["cas", "Čas", "koledar"], ["primerjava", "Primerjava", "graf"]];
   const oddelek = {
     pregled: () => [
       h("div", { class: "mreza dve" },
@@ -873,7 +989,7 @@ async function remakoZaslon() {
         h("div", { class: "chart" }, h("h3", {}, "Krivulja kapitala"), legendaVsiF(), vecKrivulj(serije)),
         graf("Koledar", koledar(poDnevu), "Dnevni rezultat REMAKO, zadnjih 12 tednov")),
     ],
-    profit: () => [obdobjeIzbira,
+    profit: () => [
       h("div", { class: "mreza dve" },
         h("div", { class: "chart" }, h("h3", {}, `Profit po ${imeObd}`), legendaLjudjeF(),
           nalozeniStolpci(obdobja.map(OZNAKA[remakoObdobje]), ljudje.map((k) => ({ ime: k, cls: cls(k), v: obdobja.map((o) => vsota(skupine.get(o).filter((t) => t.k === k))) })), { oznakeVsakih: oznakeVs })),
@@ -882,7 +998,7 @@ async function remakoZaslon() {
         h("div", { class: "chart" }, h("h3", {}, "Delež dobička"), legendaLjudjeF(), krof(ljudje.map((k) => ({ ime: k, cls: cls(k), v: poOsebi[k].neto })), kratkoSt(st.neto) + " €")),
         graf("Padec od vrha", krivulja(podvodno, { visina: 170, barva: "minus" }), `Največji padec ${evri(st.maxDD)}`)),
     ],
-    uspesnost: () => [obdobjeIzbira,
+    uspesnost: () => [
       h("div", { class: "mreza dve" },
         h("div", { class: "chart" }, h("h3", {}, `Uspešnost po ${imeObd}`), legendaVsiF(),
           vecKrivulj([{ cls: "s-skupaj", tocke: obdobja.map((o) => ({ t: o.length === 7 ? o + "-15" : o, v: Math.round(wr(skupine.get(o)) * 100) })) },
@@ -899,7 +1015,7 @@ async function remakoZaslon() {
           nalozeniStolpci(Array.from({ length: 24 }, (_, u) => String(u)), ljudje.map((k) => ({ ime: k, cls: cls(k), v: Array.from({ length: 24 }, (_, u) => vsota(trejdi.filter((t) => t.k === k && new Date(t.t).getHours() === u))) })), { oznakeVsakih: 3 }))),
       graf("Toplotna karta: dan × ura", toplota(napredno(trejdi).toplota, DNEVI), "REMAKO skupaj, ura vstopa"),
     ],
-    primerjava: () => [obdobjeIzbira,
+    primerjava: () => [
       h("div", { class: "mreza" },
         kartica("Rezultat", null, barlist(ljudje.map((k) => ({ ime: k, n: poOsebi[k].n, wr: poOsebi[k].wr, p: poOsebi[k].neto })))),
         kartica("Na trejd", null, barlist(ljudje.map((k) => ({ ime: k, n: poOsebi[k].n, wr: poOsebi[k].wr, p: Math.round(poOsebi[k].pricakovano * 100) / 100 })))),
@@ -913,9 +1029,10 @@ async function remakoZaslon() {
     ],
   };
   if (!oddelek[remakoOddelek]) remakoOddelek = "pregled";
-  zamenjaj(vsebina,
-    h("nav", { class: "oddelki" }, ODDELKI.map(([k, ime, ik]) => h("button", { class: remakoOddelek === k ? "on" : "", onclick: () => ((remakoOddelek = k), seznam()) }, ikona(ik), ime))),
-    ...oddelek[remakoOddelek]());
+  zamenjaj(naslov, h("h1", {}, imeOddelka), h("p", {}, `REMAKO d.o.o. · ${ljudje.join(" + ")} · ${datum(st.od.slice(0, 10))} – ${datum(st.do.slice(0, 10))}`));
+  zamenjaj(orodja, ["profit", "uspesnost", "primerjava"].includes(remakoOddelek) ? obdobjeIzbira : null,
+    h("span", { class: "dash-zivo" }, h("i", {}), `${st.n} trejdov`));
+  zamenjaj(vsebina, ...oddelek[remakoOddelek]());
 }
 const kratkoSt = (v) => (Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : String(Math.round(v)));
 
