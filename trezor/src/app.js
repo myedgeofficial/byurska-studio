@@ -6,7 +6,7 @@ import { initializeFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, onS
 import { getStorage, connectStorageEmulator, ref as sref, uploadBytes, getBytes, deleteObject } from "firebase/storage";
 import { read as beriTabelo, utils as tabelaUtils } from "xlsx";
 import { najdiTabelo, vTrejde, ugani, statistika as izracunaj, kljucTrejda, DNEVI, MESECI } from "./trejdi.js";
-import { krivulja, stolpci, toplota } from "./grafi.js";
+import { krivulja, stolpci, toplota, vecKrivulj, nalozeniStolpci, krof, koledar, obroc, merilnik, iskrica, trak } from "./grafi.js";
 import { napredno, simuliraj, coach, tedenski, trajanje as trajanjeKratko, SEJE } from "./analiza.js";
 import { ikona } from "./ikone.js";
 import { izKode, zakleni, odkleni, mocKode, novoGeslo, NAJMANJ_ZNAKOV, zakleniDatoteko, odkleniDatoteko } from "./kripto.js";
@@ -42,7 +42,8 @@ let posodobljeno = null;
 let odjava = null;
 let filter = { kat: "vse", isci: "" };
 let pogled = "trezor"; // ali "statistika"
-let statFilter = { racun: "vsi", obdobje: "vse", algo: "vsi", vrsta: "zivo" };
+let statFilter = { racun: "moji", obdobje: "vse", algo: "vsi", vrsta: "zivo" };
+let statOddelek = "pregled", remakoOddelek = "pregled";
 const simPravila = { maxNaDan: 0, stopPoIzgubah: 0, brezSeje: "", samoKz: false };
 const trejdiCache = new Map(); // id uvoza → trejdi (samo v pomnilniku)
 
@@ -77,7 +78,7 @@ function h(tag, lastnosti = {}, ...otroci) {
 }
 // Kot replaceChildren, a preskoči prazne (null, false) in splošči sezname.
 const zamenjaj = (el, ...otroci) => el.replaceChildren(...otroci.flat(Infinity).filter((o) => o != null && o !== false));
-const zaslon = (...vsebina) => zamenjaj(app, ...vsebina);
+const zaslon = (...vsebina) => (app.classList.toggle("siroko", pogled !== "trezor" && vsebina.some((x) => x?.classList?.contains("tabs"))), zamenjaj(app, ...vsebina));
 
 function obvestilo(besedilo) {
   const el = h("div", { class: "toast" }, besedilo);
@@ -334,7 +335,8 @@ const ujema = (v, q) =>
 function zavihki() {
   return h("div", { class: "tabs" },
     h("button", { class: pogled === "trezor" ? "on" : "", onclick: () => ((pogled = "trezor"), seznam()) }, ikona("scit"), "Trezor"),
-    h("button", { class: pogled === "statistika" ? "on" : "", onclick: () => ((pogled = "statistika"), seznam()) }, ikona("trend"), "Statistika"));
+    h("button", { class: pogled === "statistika" ? "on" : "", onclick: () => ((pogled = "statistika"), seznam()) }, ikona("trend"), "Statistika"),
+    h("button", { class: pogled === "remako" ? "on" : "", onclick: () => ((pogled = "remako"), seznam()) }, ikona("podjetje"), "REMAKO"));
 }
 
 const glavaOdprta = () =>
@@ -345,6 +347,7 @@ const glavaOdprta = () =>
 
 function seznam() {
   if (pogled === "statistika") return statistikaZaslon();
+  if (pogled === "remako") return remakoZaslon();
   const vnosi = [...podatki.vnosi].sort((a, b) =>
     a.kat === "denar" && b.kat === "denar" ? String(b.datum || "").localeCompare(String(a.datum || "")) : a.naziv.localeCompare(b.naziv, "sl"));
   const q = filter.isci.trim().toLowerCase();
@@ -755,6 +758,167 @@ const tile = (lbl, num, sub) => h("div", { class: "tile" }, h("div", { class: "l
 const graf = (naslov, svg, opomba) => h("div", { class: "chart" }, h("h3", {}, naslov), opomba ? h("div", { class: "note" }, opomba) : null, svg);
 const trajanjeBes = (min) => (min == null ? "—" : min < 60 ? Math.round(min) + " min" : min < 1440 ? (min / 60).toFixed(1) + " h" : (min / 1440).toFixed(1) + " dni");
 
+// Kdo trguje na računu: iz polja »Trguje« na kartici računa, MT5 so algoritmi, sicer kdo je uvozil.
+function trgovalec(u) {
+  const vnos = (podatki.vnosi || []).find((v) => v.naziv === u.racun);
+  const trguje = (vnos?.polja || []).find((p) => /^trguje/i.test(p.ime || ""))?.vrednost || "";
+  if (/^\s*teo/i.test(trguje)) return "Teo";
+  if (/^\s*tim/i.test(trguje)) return "Tim";
+  if (/metatrader|mt5/i.test(u.racun) || u.algo || (vnos?.polja || []).some((p) => /namen/i.test(p.ime || "") && /algorit/i.test(p.vrednost || ""))) return "Algoritmi";
+  return u.kdo || "Drugi";
+}
+const BARVA = { Teo: "s-teo", Tim: "s-tim", Algoritmi: "s-algo" };
+let remakoObdobje = "dan";
+
+async function remakoZaslon() {
+  const uvozi = podatki.uvozi || [];
+  const vsebina = h("div", {}, h("div", { class: "spin" }));
+  zaslon(glavaOdprta(), pozdrav(), zavihki(), vsebina);
+  if (!uvozi.length) return zamenjaj(vsebina, h("div", { class: "card" }, h("h1", {}, "REMAKO skupaj"),
+    h("p", { class: "muted" }, "Tukaj bo skupna statistika podjetja: Teo + Tim + algoritmi, po dnevih, tednih in mesecih. Najprej uvozita zgodovino trejdov."),
+    h("button", { class: "btn", onclick: () => uvoziTrejde() }, "Uvozi zgodovino")));
+  let vsi;
+  try { vsi = await naloziTrejde(); } catch (e) { console.error(e); return zamenjaj(vsebina, h("p", { class: "err" }, "Zgodovine ni bilo mogoče naložiti.")); }
+  if (pogled !== "remako") return;
+  const kdoZa = new Map(uvozi.map((u) => [u.racun, trgovalec(u)]));
+  const trejdi = vsi.filter((t) => t.v === "zivo").map((t) => ({ ...t, k: kdoZa.get(t.r) || "Drugi" })).sort((a, b) => a.t.localeCompare(b.t));
+  if (!trejdi.length) return zamenjaj(vsebina, h("p", { class: "empty" }, "Ni trejdov živega trgovanja (backtesti se tu ne štejejo)."));
+  const ljudje = ["Teo", "Tim", "Algoritmi", ...new Set(trejdi.map((t) => t.k))].filter((x, i, a) => a.indexOf(x) === i && trejdi.some((t) => t.k === x));
+  const cls = (k) => BARVA[k] || "s-drugi";
+  const st = izracunaj(trejdi);
+  const poOsebi = Object.fromEntries(ljudje.map((k) => [k, izracunaj(trejdi.filter((t) => t.k === k))]));
+
+  const d0 = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const ponedeljek = (d) => { const x = new Date(d); x.setHours(12, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return d0(x); };
+  const KLJUC = { dan: (d) => d0(d), teden: ponedeljek, mesec: (d) => d0(d).slice(0, 7) };
+  const OZNAKA = { dan: (k) => k.slice(8) + "." + k.slice(5, 7), teden: (k) => k.slice(8) + "." + k.slice(5, 7), mesec: (k) => MESECI[+k.slice(5) - 1] + " " + k.slice(2, 4) };
+  const kljuc = KLJUC[remakoObdobje];
+  const obdobja = [...new Set(trejdi.map((t) => kljuc(new Date(t.t))))].sort().slice(remakoObdobje === "dan" ? -45 : remakoObdobje === "teden" ? -26 : -24);
+  const skupine = new Map(obdobja.map((o) => [o, []]));
+  for (const t of trejdi) skupine.get(kljuc(new Date(t.t)))?.push(t);
+  const vsota = (a) => Math.round(a.reduce((x, t) => x + t.p, 0) * 100) / 100;
+  const wr = (a) => (a.length ? a.filter((t) => t.p > 0).length / a.length : 0);
+
+  const zdaj = new Date();
+  const danes = trejdi.filter((t) => KLJUC.dan(new Date(t.t)) === KLJUC.dan(zdaj));
+  const taTeden = trejdi.filter((t) => KLJUC.teden(new Date(t.t)) === KLJUC.teden(zdaj));
+  const taMesec = trejdi.filter((t) => KLJUC.mesec(new Date(t.t)) === KLJUC.mesec(zdaj));
+
+  // Krivulje kapitala po osebah in skupaj
+  const kumul = (a) => { let v = 0; return a.map((t) => ({ t: t.t, v: Math.round((v += t.p) * 100) / 100 })); };
+  const serije = [{ ime: "REMAKO", cls: "s-skupaj", tocke: kumul(trejdi) }, ...ljudje.map((k) => ({ ime: k, cls: cls(k), tocke: kumul(trejdi.filter((t) => t.k === k)) }))];
+  const legenda = (imena) => h("div", { class: "legenda" }, imena.map(([ime, c]) => h("span", { class: c }, ime)));
+  const legendaVsi = legenda([["REMAKO skupaj", "s-skupaj"], ...ljudje.map((k) => [k, cls(k)])]);
+  const legendaLjudje = legenda(ljudje.map((k) => [k, cls(k)]));
+
+  // Padec od vrha (skupaj)
+  let vrh = 0, kap = 0;
+  const podvodno = trejdi.map((t) => { kap += t.p; vrh = Math.max(vrh, kap); return { t: t.t, v: Math.round((kap - vrh) * 100) / 100 }; });
+  // Porazdelitev rezultatov trejdov
+  const ps = trejdi.map((t) => t.p).sort((a, b) => a - b);
+  const lo = ps[Math.floor(ps.length * 0.02)], hi = ps[Math.ceil(ps.length * 0.98) - 1];
+  const KOS = 14, korak = (hi - lo) / KOS || 1;
+  const kosi = Array.from({ length: KOS }, (_, i) => ({ od: lo + i * korak, n: 0 }));
+  for (const p of ps) kosi[Math.min(KOS - 1, Math.max(0, Math.floor((p - lo) / korak)))].n++;
+  // Dnevni rezultat za koledar
+  const poDnevu = new Map();
+  for (const t of trejdi) { const k = KLJUC.dan(new Date(t.t)); poDnevu.set(k, (poDnevu.get(k) || 0) + t.p); }
+  const tabela = (glava, vrstice) => h("table", { class: "tbl" }, h("tr", {}, glava.map((g) => h("th", {}, g))), vrstice.map((r) => h("tr", {}, r.map((c) => h("td", {}, c)))));
+  const pfStr = (x) => (Number.isFinite(x) ? x.toFixed(2) : "∞");
+  // Skupni nasveti za oba
+  const nas = coach(st, napredno(trejdi), evri, odstotek, true);
+  const dobro = [...nas.pomaga], slabo = [...nas.skodi], izboljsaj = [];
+  for (const k of ljudje) {
+    const x = poOsebi[k];
+    if (x.n < 10) continue;
+    if (x.neto > 0 && x.pf >= 1.2) dobro.push(`${k}: ${evri(x.neto)}, PF ${pfStr(x.pf)}, uspešnost ${odstotek(x.wr)}.`);
+    else if (x.neto < 0) slabo.push(`${k} je v minusu (${evri(x.neto)}, PF ${pfStr(x.pf)}).`);
+    else izboljsaj.push(`${k} je blizu ničle (PF ${pfStr(x.pf)}). Manj trejdov, samo najboljši setupi.`);
+    if (x.povpP && x.povpZ / -x.povpP < 1 && x.wr < 0.6) izboljsaj.push(`${k}: povprečna izguba (${evri(-x.povpP)}) je večja od povprečnega dobitka (${evri(x.povpZ)}). Cilj: dobitek vsaj 1,5× izguba.`);
+    if (x.neto > 0 && x.maxDD > x.neto) izboljsaj.push(`${k}: največji padec (${evri(x.maxDD)}) je večji od celotnega dobička. Manjša velikost pozicij ali dnevni limit izgube.`);
+  }
+  const tedenNaz = tedenski(trejdi);
+  if (tedenNaz.ta.n && tedenNaz.prej.n) (tedenNaz.ta.p >= tedenNaz.prej.p ? dobro : izboljsaj).push(`Ta teden ${evri(tedenNaz.ta.p)}, prejšnji ${evri(tedenNaz.prej.p)}.`);
+  const slabDan = st.tedni.filter((d) => d.n >= 5).sort((a, b) => a.p - b.p)[0];
+  if (slabDan && slabDan.p < 0) izboljsaj.push(`${["Ponedeljek", "Torek", "Sreda", "Četrtek", "Petek", "Sobota", "Nedelja"][slabDan.k]} je skupno najslabši dan (${evri(slabDan.p)}). Ta dan manj trejdov ali premor.`);
+  const nasvetiStolpec = (naslov, c, a) => h("div", { class: "coach-col " + c }, h("b", {}, naslov), a.length ? h("ul", {}, a.map((u) => h("li", {}, u))) : h("p", { class: "dim small" }, "Nič izrazitega."));
+  const imeObd = { dan: "dnevih", teden: "tednih", mesec: "mesecih" }[remakoObdobje];
+
+  const vk = (lbl, ...v) => h("div", { class: "vk" }, h("div", { class: "lbl" }, lbl), ...v);
+  const kartica = (naslov, opomba, ...v) => h("div", { class: "chart" }, h("h3", {}, naslov), opomba ? h("div", { class: "note" }, opomba) : null, ...v);
+  const barlist = (items) => { const max = Math.max(1, ...items.map((x) => Math.abs(x.p))); return h("div", { class: "barlist" }, items.map((x) => h("div", { class: "bl" },
+    h("div", { class: "ime" }, x.ime, h("small", {}, `${x.n} trejdov · ${odstotek(x.wr)}`)),
+    h("div", { class: "os" }, h("i", { class: x.p >= 0 ? "plus" : "minus", style: `width:${(Math.abs(x.p) / max) * 50}%` })),
+    h("div", { class: "zn" }, pnl(x.p))))); };
+  const obdobjeIzbira = h("div", { class: "tabs small tri" }, [["dan", "Dnevno"], ["teden", "Tedensko"], ["mesec", "Mesečno"]].map(([k, ime]) =>
+    h("button", { class: remakoObdobje === k ? "on" : "", onclick: () => ((remakoObdobje = k), seznam()) }, ime)));
+  const oznakeVs = Math.ceil(obdobja.length / 10);
+  const ODDELKI = [["pregled", "Pregled", "vse"], ["profit", "Profit", "denar"], ["uspesnost", "Uspešnost", "trend"], ["cas", "Čas", "koledar"], ["primerjava", "Primerjava", "graf"]];
+  const oddelek = {
+    pregled: () => [
+      h("div", { class: "mreza dve" },
+        h("div", { class: "hero" }, h("div", { class: "lbl" }, "REMAKO skupaj"), h("div", { class: "velik" }, pnl(st.neto)),
+          h("div", { class: "pod" }, `${st.n} trejdov · uspešnost ${odstotek(st.wr)} · PF ${pfStr(st.pf)}`), iskrica(st.krivulja, st.neto >= 0 ? "plus" : "minus")),
+        h("div", { class: "viz" },
+          vk("Danes", h("div", { class: "vrednost" }, pnl(vsota(danes))), h("div", { class: "pod" }, `${danes.length} trejdov · ${odstotek(wr(danes))}`)),
+          vk("Ta teden", h("div", { class: "vrednost" }, pnl(vsota(taTeden))), h("div", { class: "pod" }, `${taTeden.length} trejdov · ${odstotek(wr(taTeden))}`)),
+          vk("Ta mesec", h("div", { class: "vrednost" }, pnl(vsota(taMesec))), h("div", { class: "pod" }, `${taMesec.length} trejdov · ${odstotek(wr(taMesec))}`)),
+          vk("Uspešnost", obroc(st.wr, odstotek(st.wr), st.wr >= 0.5 ? "plus" : "minus")))),
+      h("div", { class: "mreza" }, ljudje.map((k) => h("div", { class: "vk oseba " + cls(k) },
+        h("div", { class: "lbl" }, k), h("div", { class: "vrstaosebe" }, obroc(poOsebi[k].wr, odstotek(poOsebi[k].wr), poOsebi[k].wr >= 0.5 ? "plus" : "minus"),
+          h("div", {}, h("div", { class: "vrednost" }, pnl(poOsebi[k].neto)), h("div", { class: "pod" }, `${poOsebi[k].n} trejdov · PF ${pfStr(poOsebi[k].pf)}`))),
+        iskrica(kumul(trejdi.filter((t) => t.k === k)), poOsebi[k].neto >= 0 ? "plus" : "minus")))),
+      h("div", { class: "coach tri" }, nasvetiStolpec("Kaj je dobro", "dobro", dobro), nasvetiStolpec("Kaj izboljšati", "srednje", izboljsaj), nasvetiStolpec("Kaj je slabo", "", slabo)),
+      h("div", { class: "mreza dve" },
+        h("div", { class: "chart" }, h("h3", {}, "Krivulja kapitala"), legendaVsi, vecKrivulj(serije)),
+        graf("Koledar", koledar(poDnevu), "Dnevni rezultat REMAKO, zadnjih 12 tednov")),
+    ],
+    profit: () => [obdobjeIzbira,
+      h("div", { class: "mreza dve" },
+        h("div", { class: "chart" }, h("h3", {}, `Profit po ${imeObd}`), legendaLjudje,
+          nalozeniStolpci(obdobja.map(OZNAKA[remakoObdobje]), ljudje.map((k) => ({ ime: k, cls: cls(k), v: obdobja.map((o) => vsota(skupine.get(o).filter((t) => t.k === k))) })), { oznakeVsakih: oznakeVs })),
+        graf(`Skupaj po ${imeObd}`, stolpci(obdobja.map((o) => ({ oznaka: OZNAKA[remakoObdobje](o), v: vsota(skupine.get(o)), opis: `${o}: ${evri(vsota(skupine.get(o)))}, ${skupine.get(o).length} trejdov` })), { oznakeVsakih: oznakeVs }))),
+      h("div", { class: "mreza dve" },
+        h("div", { class: "chart" }, h("h3", {}, "Delež dobička"), legendaLjudje, krof(ljudje.map((k) => ({ ime: k, cls: cls(k), v: poOsebi[k].neto })), evri(st.neto))),
+        graf("Padec od vrha", krivulja(podvodno, { visina: 170 }), `Največji padec ${evri(st.maxDD)}`)),
+    ],
+    uspesnost: () => [obdobjeIzbira,
+      h("div", { class: "mreza dve" },
+        h("div", { class: "chart" }, h("h3", {}, `Uspešnost po ${imeObd}`), legendaVsi,
+          vecKrivulj([{ cls: "s-skupaj", tocke: obdobja.map((o) => ({ t: o.length === 7 ? o + "-15" : o, v: Math.round(wr(skupine.get(o)) * 100) })) },
+            ...ljudje.map((k) => ({ cls: cls(k), tocke: obdobja.filter((o) => skupine.get(o).some((t) => t.k === k)).map((o) => ({ t: o.length === 7 ? o + "-15" : o, v: Math.round(wr(skupine.get(o).filter((t) => t.k === k)) * 100) })) }))], { visina: 200, enota: " %" })),
+        graf("Porazdelitev rezultatov trejdov", stolpci(kosi.map((x) => ({ oznaka: kratkoSt(x.od), v: x.n, opis: `${evri(x.od)} do ${evri(x.od + korak)}: ${x.n} trejdov` })), { oznakeVsakih: 3 }), "Koliko trejdov je padlo v posamezen razpon")),
+      h("div", { class: "viz" }, ljudje.map((k) => vk(k, obroc(poOsebi[k].wr, odstotek(poOsebi[k].wr), poOsebi[k].wr >= 0.5 ? "plus" : "minus"), h("div", { class: "pod" }, `PF ${pfStr(poOsebi[k].pf)}`))),
+        h("div", { class: "vk" }, h("div", { class: "lbl" }, "Delež trejdov"), krof(ljudje.map((k) => ({ ime: k, cls: cls(k), v: poOsebi[k].n })), String(st.n)))),
+    ],
+    cas: () => [
+      h("div", { class: "mreza dve" },
+        h("div", { class: "chart" }, h("h3", {}, "Po dnevih v tednu"), legendaLjudje,
+          nalozeniStolpci(DNEVI, ljudje.map((k) => ({ ime: k, cls: cls(k), v: DNEVI.map((_, d) => vsota(trejdi.filter((t) => t.k === k && (new Date(t.t).getDay() + 6) % 7 === d))) })))),
+        h("div", { class: "chart" }, h("h3", {}, "Po urah dneva"), legendaLjudje,
+          nalozeniStolpci(Array.from({ length: 24 }, (_, u) => String(u)), ljudje.map((k) => ({ ime: k, cls: cls(k), v: Array.from({ length: 24 }, (_, u) => vsota(trejdi.filter((t) => t.k === k && new Date(t.t).getHours() === u))) })), { oznakeVsakih: 3 }))),
+      graf("Toplotna karta: dan × ura", toplota(napredno(trejdi).toplota, DNEVI), "REMAKO skupaj, ura vstopa"),
+    ],
+    primerjava: () => [obdobjeIzbira,
+      h("div", { class: "mreza" },
+        kartica("Rezultat", null, barlist(ljudje.map((k) => ({ ime: k, n: poOsebi[k].n, wr: poOsebi[k].wr, p: poOsebi[k].neto })))),
+        kartica("Na trejd", null, barlist(ljudje.map((k) => ({ ime: k, n: poOsebi[k].n, wr: poOsebi[k].wr, p: Math.round(poOsebi[k].pricakovano * 100) / 100 })))),
+        kartica("Največji padec", null, barlist(ljudje.map((k) => ({ ime: k, n: poOsebi[k].n, wr: poOsebi[k].wr, p: -poOsebi[k].maxDD }))))),
+      h("div", { class: "chart" }, h("h3", {}, `Pregled po ${imeObd}`),
+        tabela(["Obdobje", ...ljudje, "Skupaj", "Uspešnost"], [...obdobja].reverse().map((o) => {
+          const a = skupine.get(o);
+          return [OZNAKA[remakoObdobje](o), ...ljudje.map((k) => { const x = a.filter((t) => t.k === k); return x.length ? pnl(vsota(x)) : "—"; }), pnl(vsota(a)), odstotek(wr(a))];
+        }))),
+      h("p", { class: "fine" }, "Šteje samo živo trgovanje. Kdo trguje, se vzame iz polja »Trguje« na kartici računa (MT5 = algoritmi). Zneski so v valuti računov."),
+    ],
+  };
+  if (!oddelek[remakoOddelek]) remakoOddelek = "pregled";
+  zamenjaj(vsebina,
+    h("nav", { class: "oddelki" }, ODDELKI.map(([k, ime, ik]) => h("button", { class: remakoOddelek === k ? "on" : "", onclick: () => ((remakoOddelek = k), seznam()) }, ikona(ik), ime))),
+    ...oddelek[remakoOddelek]());
+}
+const kratkoSt = (v) => (Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : String(Math.round(v)));
+
 async function statistikaZaslon() {
   const uvozi = podatki.uvozi || [];
   const vsebina = h("div", {}, h("div", { class: "spin" }));
@@ -776,18 +940,22 @@ async function statistikaZaslon() {
   }
   if (pogled !== "statistika") return;
   const racuni = [...new Set(uvozi.map((u) => u.racun))];
+  const moji = racuni.filter((r) => trgovalec(uvozi.find((u) => u.racun === r)) === beriIme());
+  if (statFilter.racun === "moji" && !moji.length) statFilter.racun = "vsi";
+  const naRacunu = (r) => statFilter.racun === "vsi" || (statFilter.racun === "moji" ? moji.includes(r) : r === statFilter.racun);
   const meja = { vse: 0, "30": Date.now() - 30 * 864e5, "90": Date.now() - 90 * 864e5, leto: new Date(new Date().getFullYear(), 0, 1).getTime() }[statFilter.obdobje] || 0;
   const vVrsti = vsi.filter((t) => t.v === statFilter.vrsta);
-  const algoritmi = [...new Set(vVrsti.filter((t) => statFilter.racun === "vsi" || t.r === statFilter.racun).map((t) => t.a).filter(Boolean))];
+  const algoritmi = [...new Set(vVrsti.filter((t) => naRacunu(t.r)).map((t) => t.a).filter(Boolean))];
   if (statFilter.algo !== "vsi" && !algoritmi.includes(statFilter.algo)) statFilter.algo = "vsi";
-  const izbrani = vVrsti.filter((t) => (statFilter.racun === "vsi" || t.r === statFilter.racun) && (statFilter.algo === "vsi" || t.a === statFilter.algo) && new Date(t.t).getTime() >= meja);
+  const izbrani = vVrsti.filter((t) => naRacunu(t.r) && (statFilter.algo === "vsi" || t.a === statFilter.algo) && new Date(t.t).getTime() >= meja);
   const st = izracunaj(izbrani);
   const cip = (aktivno, ime, klik) => h("button", { class: "chip" + (aktivno ? " on" : ""), onclick: klik }, ime);
   const filtri = [
     vsi.some((t) => t.v === "test") ? h("div", { class: "tabs small" },
       h("button", { class: statFilter.vrsta === "zivo" ? "on" : "", onclick: () => ((statFilter.vrsta = "zivo"), seznam()) }, "Živo trgovanje"),
       h("button", { class: statFilter.vrsta === "test" ? "on" : "", onclick: () => ((statFilter.vrsta = "test"), seznam()) }, "Backtesti")) : null,
-    h("div", { class: "chips" }, cip(statFilter.racun === "vsi", "Vsi računi", () => ((statFilter.racun = "vsi"), seznam())),
+    h("div", { class: "chips" }, moji.length ? cip(statFilter.racun === "moji", "Moji računi", () => ((statFilter.racun = "moji"), seznam())) : null,
+      cip(statFilter.racun === "vsi", "Vsi računi", () => ((statFilter.racun = "vsi"), seznam())),
       racuni.map((r) => cip(statFilter.racun === r, r, () => ((statFilter.racun = r), seznam())))),
     algoritmi.length ? h("div", { class: "chips" }, cip(statFilter.algo === "vsi", "Vsi algoritmi", () => ((statFilter.algo = "vsi"), seznam())),
       algoritmi.map((a) => cip(statFilter.algo === a, [ikona("robot"), a], () => ((statFilter.algo = a), seznam())))) : null,
@@ -799,26 +967,29 @@ async function statistikaZaslon() {
   const ure = st.ure.sort((a, b) => a.k - b.k);
   const zadnjiDnevi = st.dnevi.slice(-60);
   const mes = st.meseci.map((m) => ({ oznaka: MESECI[+m.k.slice(5) - 1] + (st.meseci.length > 12 ? " " + m.k.slice(2, 4) : ""), v: m.p, opis: `${m.k}: ${evri(m.p)}, ${m.n} trejdov` }));
-
-  // Kdaj nama gre najbolje in najslabše
+  const DAN_IME = ["ponedeljek", "torek", "sreda", "četrtek", "petek", "sobota", "nedelja"];
   const sTrejdi = (a) => a.filter((x) => x.n >= 3);
   const najTeden = [...sTrejdi(tedni)].sort((a, b) => b.p - a.p);
   const najUra = [...sTrejdi(ure)].sort((a, b) => b.p - a.p);
-  const ugotovitve = [
-    najTeden.length && `Najboljši dan v tednu: ${["ponedeljek", "torek", "sreda", "četrtek", "petek", "sobota", "nedelja"][najTeden[0].k]} (${evri(najTeden[0].p)}, uspešnost ${odstotek(najTeden[0].wr)}).`,
-    najTeden.length > 1 && najTeden[najTeden.length - 1].p < 0 && `Najslabši dan v tednu: ${["ponedeljek", "torek", "sreda", "četrtek", "petek", "sobota", "nedelja"][najTeden[najTeden.length - 1].k]} (${evri(najTeden[najTeden.length - 1].p)}).`,
-    najUra.length && `Najboljša ura: ${najUra[0].k}:00–${najUra[0].k + 1}:00 (${evri(najUra[0].p)}).`,
-    najUra.length > 1 && najUra[najUra.length - 1].p < 0 && `Najslabša ura: ${najUra[najUra.length - 1].k}:00–${najUra[najUra.length - 1].k + 1}:00 (${evri(najUra[najUra.length - 1].p)}).`,
-    st.simboli.length > 1 && `Najboljši instrument: ${st.simboli[0].k} (${evri(st.simboli[0].p)}), najslabši: ${st.simboli[st.simboli.length - 1].k} (${evri(st.simboli[st.simboli.length - 1].p)}).`,
-    st.smeri.length === 2 && `Long: ${evri(st.smeri.find((x) => x.k === "buy")?.p || 0)}, short: ${evri(st.smeri.find((x) => x.k === "sell")?.p || 0)}.`,
-    st.najDan && `Najboljši dan: ${datum(st.najDan.k)} (${evri(st.najDan.p)}), najslabši: ${datum(st.najslDan.k)} (${evri(st.najslDan.p)}).`,
-  ].filter(Boolean);
 
   const an = napredno(izbrani);
   const nasvet = coach(st, an, evri, odstotek);
   const teden = tedenski(izbrani);
   const pf = (x) => (Number.isFinite(x) ? x.toFixed(2) : "∞");
-  const vrsticaSkupine = (x) => [x.ime, String(x.n), odstotek(x.wr), pf(x.pf), pnl(x.p)];
+  const k = an.konsistenca;
+  let vrh = 0, kap = 0;
+  const podvodno = [...izbrani].sort((a, b) => a.t.localeCompare(b.t)).map((t) => { kap += t.p; vrh = Math.max(vrh, kap); return { t: t.t, v: kap - vrh }; });
+
+  // Gradniki
+  const vk = (lbl, ...vsebina) => h("div", { class: "vk" }, h("div", { class: "lbl" }, lbl), ...vsebina);
+  const par = (vrstice) => { const max = Math.max(1, ...vrstice.map((r) => Math.abs(r[1]))); return h("div", { class: "par" }, vrstice.map(([ime, v, cls, besedilo]) => h("div", { class: "vrsta" }, ime, h("div", { class: "bar" }, h("i", { class: cls, style: `width:${Math.max(3, (Math.abs(v) / max) * 100)}%` })), h("b", {}, besedilo ?? evri(v))))); };
+  const barlist = (items) => { const max = Math.max(1, ...items.map((x) => Math.abs(x.p))); return h("div", { class: "barlist" }, items.map((x) => h("div", { class: "bl" },
+    h("div", { class: "ime" }, x.ime, h("small", {}, `${x.n} trejdov · ${odstotek(x.wr)}`)),
+    h("div", { class: "os" }, h("i", { class: x.p >= 0 ? "plus" : "minus", style: `width:${(Math.abs(x.p) / max) * 50}%` })),
+    h("div", { class: "zn" }, pnl(x.p))))); };
+  const kartica = (naslov, opomba, ...vsebina) => h("div", { class: "chart" }, h("h3", {}, naslov), opomba ? h("div", { class: "note" }, opomba) : null, ...vsebina);
+  const znacka = (ik, besedilo, cls) => h("span", { class: "znacka " + (cls || "") }, ikona(ik), besedilo);
+
   const simKartica = h("div", { class: "chart" });
   const narisiSim = () => {
     const sim = simuliraj(izbrani, simPravila);
@@ -826,93 +997,100 @@ async function statistikaZaslon() {
       moznosti.map(([v, ime]) => h("option", { value: v, selected: simPravila[kljuc] === v }, ime))));
     const razlika = sim.neto - st.neto;
     zamenjaj(simKartica, h("h3", {}, "Simulator pravil"),
-      h("div", { class: "note" }, "Kaj bi bilo, če bi se držala teh pravil (na istih trejdih)."),
+      h("div", { class: "note" }, "Kaj bi bilo, če bi se držal teh pravil (na istih trejdih)."),
       h("div", { class: "sim" },
         izbor("Največ trejdov na dan", "maxNaDan", [[0, "brez omejitve"], [1, "1"], [2, "2"], [3, "3"], [5, "5"], [10, "10"], [20, "20"]]),
         izbor("Konec dneva po izgubah", "stopPoIzgubah", [[0, "nikoli"], [1, "po 1. izgubi"], [2, "po 2 izgubah"], [3, "po 3 izgubah"]]),
         izbor("Brez seje", "brezSeje", [["", "trguj vse seje"], ...SEJE.slice(0, 3).map(([ime]) => [ime, ime])]),
         h("label", { class: "check" }, h("input", { type: "checkbox", checked: simPravila.samoKz, onchange: (e) => ((simPravila.samoKz = e.target.checked), narisiSim()) }), "Samo v killzonah (brez NY kosila)")),
-      h("div", { class: "tiles" },
-        tile("Neto s pravili", pnl(sim.neto), h("span", { class: razlika >= 0 ? "pos" : "neg" }, (razlika >= 0 ? "+" : "−") + evri(Math.abs(razlika)) + " proti dejanskemu")),
-        tile("Trejdov", String(sim.n), `od ${st.n}`),
-        tile("Uspešnost", odstotek(sim.wr), `dejansko ${odstotek(st.wr)}`),
-        tile("Največji padec", h("span", { class: "neg" }, "−" + evri(sim.maxDD)), `dejansko −${evri(st.maxDD)}`)),
-      sim.krivulja.length > 1 ? krivulja(sim.krivulja, { visina: 150 }) : null);
+      h("div", { class: "viz" },
+        vk("Neto s pravili", h("div", { class: "vrednost" }, pnl(sim.neto)), h("div", { class: "pod " + (razlika >= 0 ? "pos" : "neg") }, (razlika >= 0 ? "+" : "−") + evri(Math.abs(razlika)) + " proti dejanskemu")),
+        vk("Trejdov", obroc(st.n ? sim.n / st.n : 0, String(sim.n), "vij"), h("div", { class: "pod" }, `od ${st.n}`)),
+        vk("Uspešnost", obroc(sim.wr, odstotek(sim.wr), sim.wr >= 0.5 ? "plus" : "minus"), h("div", { class: "pod" }, `dejansko ${odstotek(st.wr)}`)),
+        vk("Največji padec", h("div", { class: "vrednost neg" }, "−" + evri(sim.maxDD)), h("div", { class: "pod" }, `dejansko −${evri(st.maxDD)}`))),
+      vecKrivulj([{ cls: "s-drugi", tocke: st.krivulja }, { cls: "s-skupaj", tocke: sim.krivulja }], { visina: 200 }),
+      h("div", { class: "legenda" }, h("span", { class: "s-skupaj" }, "S pravili"), h("span", { class: "s-drugi" }, "Dejansko")));
   };
   narisiSim();
-  const k = an.konsistenca;
 
-  const tabela = (glava, vrstice) => h("table", { class: "tbl" }, h("tr", {}, glava.map((g) => h("th", {}, g))), vrstice.map((r) => h("tr", {}, r.map((c) => h("td", {}, c)))));
-
-  zamenjaj(vsebina, 
-    ...filtri,
-    h("div", { class: "tiles" },
-      tile("Neto rezultat", pnl(st.neto), `${st.n} trejdov · ${datum(st.od.slice(0, 10))}–${datum(st.do.slice(0, 10))}`),
-      tile("Uspešnost", odstotek(st.wr), `${st.zmag} dobljenih · ${st.porazov} izgubljenih`),
-      tile("Profit factor", Number.isFinite(st.pf) ? st.pf.toFixed(2) : "∞", `bruto ${evri(st.bruto)} / ${evri(st.izguba)}`),
-      tile("Pričakovano na trejd", pnl(st.pricakovano), "povprečje vseh trejdov"),
-      tile("Povp. dobitek", pnl(st.povpZ), `povp. izguba ${evri(st.povpP)}`),
-      tile("Razmerje dobitek/izguba", st.povpP ? (st.povpZ / -st.povpP).toFixed(2) : "—", "povp. dobitek ÷ povp. izguba"),
-      tile("Največji padec", h("span", { class: "neg" }, "−" + evri(st.maxDD)), st.ddOd ? `${datum(st.ddOd.slice(0, 10))} → ${datum(st.ddDo.slice(0, 10))}` : ""),
-      tile("Zeleni dnevi", odstotek(st.zelenihDni), `${st.dnevi.length} dni trgovanja · povp. ${evri(st.povpDan)}/dan`),
-      tile("Najboljši trejd", pnl(st.najboljsi.p), `${st.najboljsi.s || ""} ${datum(st.najboljsi.t.slice(0, 10))}`),
-      tile("Najslabši trejd", pnl(st.najslabsi.p), `${st.najslabsi.s || ""} ${datum(st.najslabsi.t.slice(0, 10))}`),
-      tile("Niz dobljenih", String(st.nizZ), `niz izgubljenih ${st.nizP}`),
-      tile("Povp. trajanje", trajanjeBes(st.trajanje), "od odprtja do zaprtja")),
-    ugotovitve.length ? h("div", { class: "insight" }, h("b", {}, "Kdaj vama gre najbolje"), h("ul", {}, ugotovitve.map((u) => h("li", {}, u)))) : null,
-    nasvet.skodi.length || nasvet.pomaga.length ? h("div", { class: "coach" },
-      h("div", { class: "coach-col" }, h("b", {}, "Kaj vama škodi"), nasvet.skodi.length ? h("ul", {}, nasvet.skodi.map((u) => h("li", {}, u))) : h("p", { class: "dim small" }, "Nič izrazitega.")),
-      h("div", { class: "coach-col dobro" }, h("b", {}, "Kaj vama pomaga"), nasvet.pomaga.length ? h("ul", {}, nasvet.pomaga.map((u) => h("li", {}, u))) : h("p", { class: "dim small" }, "Še premalo podatkov."))) : null,
-    teden.ta.n || teden.prej.n ? h("div", { class: "chart" }, h("h3", {}, "Tedenski pregled"),
-      tabela(["", "Trejdi", "Uspešnost", "PF", "Rezultat"], [["Zadnjih 7 dni", String(teden.ta.n), odstotek(teden.ta.wr), pf(teden.ta.pf), pnl(teden.ta.p)], ["Prejšnjih 7 dni", String(teden.prej.n), odstotek(teden.prej.wr), pf(teden.prej.pf), pnl(teden.prej.p)]])) : null,
-    graf("Krivulja kapitala", krivulja(st.krivulja), "Seštevek rezultatov skozi čas"),
-    graf("Rezultat po dnevih", stolpci(zadnjiDnevi.map((d) => ({ oznaka: d.k.slice(8) + "." + d.k.slice(5, 7), v: d.p, opis: `${datum(d.k)}: ${evri(d.p)}, ${d.n} trejdov` })), { oznakeVsakih: Math.ceil(zadnjiDnevi.length / 10) }),
-      st.dnevi.length > 60 ? "Zadnjih 60 dni trgovanja" : null),
-    graf("Po mesecih", stolpci(mes, { oznakeVsakih: Math.ceil(mes.length / 12) })),
-    graf("Po dnevih v tednu", stolpci(tedni.map((d) => ({ oznaka: DNEVI[d.k], v: d.p, opis: `${DNEVI[d.k]}: ${evri(d.p)}, ${d.n} trejdov, uspešnost ${odstotek(d.wr)}` })))),
-    graf("Po urah dneva", stolpci(ure.map((u) => ({ oznaka: String(u.k), v: u.p, opis: `${u.k}:00: ${evri(u.p)}, ${u.n} trejdov` })), { oznakeVsakih: ure.length > 12 ? 2 : 1 }), "Čas po uri te naprave"),
-    graf("Toplotna karta: dan × ura", toplota(an.toplota, DNEVI), "Zeleno = dobiček, rdeče = izguba, močnejša barva = večji znesek. Ura vstopa po času te naprave."),
-    graf("Po sejah", stolpci(an.seje.map((x) => ({ oznaka: x.ime, v: x.p, opis: `${x.ime}: ${evri(x.p)}, ${x.n} trejdov, uspešnost ${odstotek(x.wr)}` }))), "Čas New York: Azija 18–03, London 03–08, New York 08–17"),
-    h("div", { class: "chart" }, h("h3", {}, "Killzone (ICT)"), h("div", { class: "note" }, "Čas New York: Asia 20–24, London 2–5, NY AM 8:30–11, kosilo 12–13:30, NY PM 13:30–16"),
-      tabela(["Okno", "Trejdi", "Uspešnost", "PF", "Rezultat"], [...an.killzone.filter((x) => x.n).map(vrsticaSkupine), vrsticaSkupine({ ime: "Izven killzon", ...an.izvenKz })])),
-    h("div", { class: "chart" }, h("h3", {}, "Izvedba"),
-      h("div", { class: "tiles" },
-        tile("Držanje dobitkov", trajanjeKratko(an.izvedba.dobitki), `povprečje ${trajanjeKratko(an.izvedba.povpDobitki)}`),
-        tile("Držanje izgub", trajanjeKratko(an.izvedba.izgube), `povprečje ${trajanjeKratko(an.izvedba.povpIzgube)}`),
-        tile("Po izgubi (≤ 15 min)", pnl(an.poIzgubi.p), `${an.poIzgubi.n} trejdov · ${odstotek(an.poIzgubi.wr)}`),
-        tile("Po dobitku (≤ 15 min)", pnl(an.poDobitku.p), `${an.poDobitku.n} trejdov · ${odstotek(an.poDobitku.wr)}`)),
-      an.poTrajanju.length ? tabela(["Trajanje", "Trejdi", "Uspešnost", "PF", "Rezultat"], an.poTrajanju.map(vrsticaSkupine)) : null),
-    h("div", { class: "chart" }, h("h3", {}, "Konsistenca in overtrading"),
-      h("div", { class: "tiles" },
-        tile("Najboljši dan", odstotek(k.najDanDelez), k.najDan ? `od dobička · ${datum(k.najDan.k)}` : "od dobička"),
-        tile("Top 3 dnevi", odstotek(k.top3Delez), "delež vsega dobička"),
-        tile("Nihanje na dan", evri(k.std), `povprečje ${evri(k.povpDan)} · razmerje ${k.sharpeDan.toFixed(2)}`),
-        tile("Trejdov na dan", k.povpTrejdov.toFixed(1).replace(".", ","), `največ ${k.maxTrejdov}`)),
-      tabela(["Trejd v dnevu", "Trejdi", "Uspešnost", "PF", "Rezultat"], an.zapStevilka.map(vrsticaSkupine))),
-    simKartica,
-    h("p", { class: "fine" }, "MAE/MFE in dejanski risk/reward potrebujeta podatke o stop lossu in gibanju cene med trejdom, ki jih izvozi ne vsebujejo."),
-    st.simboli.length ? graf("Po instrumentih", stolpci(st.simboli.slice(0, 12).map((x) => ({ oznaka: x.k.slice(0, 7), v: x.p, opis: `${x.k}: ${evri(x.p)}, ${x.n} trejdov` })))) : null,
-    st.simboli.length ? h("div", { class: "chart" }, h("h3", {}, "Instrumenti"),
-      tabela(["Instrument", "Trejdi", "Uspešnost", "Rezultat"], st.simboli.map((x) => [x.k, String(x.n), odstotek(x.wr), pnl(x.p)]))) : null,
-    st.algoritmi.length > 1 && statFilter.algo === "vsi" ? graf("Primerjava algoritmov", stolpci(st.algoritmi.map((x) => ({ oznaka: x.k.slice(0, 9), v: x.p, opis: `${x.k}: ${evri(x.p)}, ${x.n} trejdov` })))) : null,
-    st.algoritmi.length > 1 && statFilter.algo === "vsi" ? h("div", { class: "chart" }, h("h3", {}, "Algoritmi"),
-      tabela(["Algoritem", "Trejdi", "Uspešnost", "PF", "Max padec", "Rezultat"], st.algoritmi.map((x) => {
-        const a = izracunaj(izbrani.filter((t) => t.a === x.k));
-        return [x.k, String(a.n), odstotek(a.wr), Number.isFinite(a.pf) ? a.pf.toFixed(2) : "∞", evri(a.maxDD), pnl(a.neto)];
-      }))) : null,
-    racuni.length > 1 && statFilter.racun === "vsi" ? h("div", { class: "chart" }, h("h3", {}, "Po računih"),
-      tabela(["Račun", "Trejdi", "Uspešnost", "Rezultat"], racuni.map((r) => { const x = izracunaj(izbrani.filter((t) => t.r === r)); return [r, String(x.n), odstotek(x.wr), pnl(x.neto)]; }))) : null,
-    h("div", { class: "chart" }, h("h3", {}, "Uvoženo"),
-      tabela(["Datoteka", "Trejdi", ""], uvozi.map((u) => [h("span", {}, u.racun + (u.algo ? " · " + u.algo : "") + (u.vrsta === "test" ? " · backtest" : ""), h("div", { class: "dim small" }, `${u.ime} · ${u.kdo || ""} ${new Date(u.dodano).toLocaleDateString("sl-SI")}`)), String(u.st),
-        h("button", { class: "mini danger", onclick: async () => {
-          if (!confirm(`Odstranim uvoz »${u.ime}«?`)) return;
-          await spremeni((d) => (d.uvozi = (d.uvozi || []).filter((y) => y.id !== u.id)));
-          deleteObject(potDatoteke(trezor.id, u.id)).catch(() => {});
-          trejdiCache.delete(u.id);
-          seznam();
-        } }, "Odstrani")]))),
-    h("p", { class: "fine" }, "Isti trejdi v več uvozih se štejejo enkrat. Zneski so v valuti računa.")
-  );
+  const ODDELKI = [["pregled", "Pregled", "vse"], ["cas", "Čas", "koledar"], ["izvedba", "Izvedba", "trend"], ["sim", "Simulator", "robot"], ["instr", "Instrumenti", "graf"]];
+  const oddelek = {
+    pregled: () => [
+      h("div", { class: "mreza dve" },
+        h("div", { class: "hero" }, h("div", { class: "lbl" }, "Neto rezultat"), h("div", { class: "velik" }, pnl(st.neto)),
+          h("div", { class: "pod" }, `${st.n} trejdov · ${datum(st.od.slice(0, 10))} – ${datum(st.do.slice(0, 10))} · ${evri(st.pricakovano)} na trejd`),
+          iskrica(st.krivulja, st.neto >= 0 ? "plus" : "minus")),
+        h("div", { class: "viz" },
+          vk("Uspešnost", obroc(st.wr, odstotek(st.wr), st.wr >= 0.5 ? "plus" : "minus"), h("div", { class: "pod" }, `${st.zmag} ✓ · ${st.porazov} ✗`)),
+          vk("Profit factor", merilnik(st.pf, 3, pf(st.pf)), h("div", { class: "pod" }, st.pf >= 1.5 ? "odlično" : st.pf >= 1 ? "v plusu" : "pod 1 = izguba")),
+          vk("Zeleni dnevi", obroc(st.zelenihDni, odstotek(st.zelenihDni), "plus"), h("div", { class: "pike" }, st.dnevi.slice(-28).map((d) => h("i", { class: d.p > 0 ? "plus" : d.p < 0 ? "minus" : "nic", title: `${datum(d.k)}: ${evri(d.p)}` })))),
+          vk("Največji padec", h("div", { class: "vrednost neg" }, "−" + evri(st.maxDD)), iskrica(podvodno, "minus")))),
+      h("div", { class: "znacke" },
+        najTeden.length ? znacka("koledar", `Najboljši dan: ${DAN_IME[najTeden[0].k]}`, "plus") : null,
+        najUra.length ? znacka("trend", `Najboljša ura: ${najUra[0].k}:00`, "plus") : null,
+        najUra.length > 1 && najUra[najUra.length - 1].p < 0 ? znacka("trend", `Najslabša ura: ${najUra[najUra.length - 1].k}:00`, "minus") : null,
+        st.simboli.length ? znacka("graf", `Najboljši: ${st.simboli[0].k}`, "plus") : null,
+        st.smeri.length === 2 ? znacka("graf", `Long ${evri(st.smeri.find((x) => x.k === "buy")?.p || 0)} · Short ${evri(st.smeri.find((x) => x.k === "sell")?.p || 0)}`) : null),
+      h("div", { class: "mreza" },
+        kartica("Dobitek proti izgubi", null, par([["Povp. dobitek", st.povpZ, "plus"], ["Povp. izguba", st.povpP, "minus"], ["Najboljši", st.najboljsi.p, "plus"], ["Najslabši", st.najslabsi.p, "minus"]]),
+          h("div", { class: "note" }, `Razmerje ${st.povpP ? (st.povpZ / -st.povpP).toFixed(2) : "—"} · niz ${st.nizZ} ✓ / ${st.nizP} ✗`)),
+        kartica("Zadnjih 60 trejdov", "Zeleno navzgor dobitek, rdeče navzdol izguba", trak([...izbrani].sort((a, b) => a.t.localeCompare(b.t)).slice(-60).map((t) => t.p))),
+        teden.ta.n || teden.prej.n ? kartica("Ta teden proti prejšnjemu", null, par([["Ta teden", teden.ta.p, teden.ta.p >= 0 ? "plus" : "minus"], ["Prejšnji", teden.prej.p, teden.prej.p >= 0 ? "plus" : "minus"]]),
+          h("div", { class: "note" }, `${teden.ta.n} trejdov (${odstotek(teden.ta.wr)}) · prej ${teden.prej.n} (${odstotek(teden.prej.wr)})`)) : null),
+      nasvet.skodi.length || nasvet.pomaga.length ? h("div", { class: "coach" },
+        h("div", { class: "coach-col" }, h("b", {}, "Kaj ti škodi"), nasvet.skodi.length ? h("ul", {}, nasvet.skodi.slice(0, 4).map((u) => h("li", {}, u))) : h("p", { class: "dim small" }, "Nič izrazitega.")),
+        h("div", { class: "coach-col dobro" }, h("b", {}, "Kaj ti pomaga"), nasvet.pomaga.length ? h("ul", {}, nasvet.pomaga.slice(0, 4).map((u) => h("li", {}, u))) : h("p", { class: "dim small" }, "Še premalo podatkov."))) : null,
+      h("div", { class: "mreza dve" },
+        graf("Krivulja kapitala", krivulja(st.krivulja)),
+        graf("Rezultat po dnevih", stolpci(zadnjiDnevi.map((d) => ({ oznaka: d.k.slice(8) + "." + d.k.slice(5, 7), v: d.p, opis: `${datum(d.k)}: ${evri(d.p)}, ${d.n} trejdov` })), { oznakeVsakih: Math.ceil(zadnjiDnevi.length / 8) }))),
+    ],
+    cas: () => [
+      h("div", { class: "mreza dve" },
+        graf("Toplotna karta: dan × ura", toplota(an.toplota, DNEVI), "Zeleno dobiček, rdeče izguba. Ura vstopa."),
+        graf("Koledar", koledar(new Map(st.dnevi.map((d) => [d.k, d.p]))), "Zadnjih 12 tednov")),
+      h("div", { class: "mreza" },
+        kartica("Seje", "Čas New York: Azija 18–03, London 03–08, New York 08–17", barlist(an.seje)),
+        kartica("Killzone (ICT)", "Asia 20–24, London 2–5, NY AM 8:30–11, kosilo 12–13:30, NY PM 13:30–16", barlist([...an.killzone.filter((x) => x.n), { ime: "Izven killzon", ...an.izvenKz }])),
+        kartica("Dnevi v tednu", null, barlist(tedni.filter((d) => d.n).map((d) => ({ ime: DAN_IME[d.k], ...d }))))),
+      h("div", { class: "mreza dve" },
+        graf("Po urah dneva", stolpci(ure.map((u) => ({ oznaka: String(u.k), v: u.p, opis: `${u.k}:00: ${evri(u.p)}, ${u.n} trejdov` })), { oznakeVsakih: ure.length > 12 ? 3 : 1 })),
+        graf("Po mesecih", stolpci(mes, { oznakeVsakih: Math.ceil(mes.length / 8) }))),
+    ],
+    izvedba: () => [
+      h("div", { class: "viz" },
+        vk("Držanje dobitkov", h("div", { class: "vrednost pos" }, trajanjeKratko(an.izvedba.dobitki)), h("div", { class: "pod" }, "mediana")),
+        vk("Držanje izgub", h("div", { class: "vrednost neg" }, trajanjeKratko(an.izvedba.izgube)), h("div", { class: "pod" }, "mediana")),
+        vk("Najboljši dan", obroc(k.najDanDelez, odstotek(k.najDanDelez), k.najDanDelez > 0.5 ? "minus" : "zlata"), h("div", { class: "pod" }, "delež vsega dobička")),
+        vk("Trejdov na dan", obroc(k.maxTrejdov ? k.povpTrejdov / k.maxTrejdov : 0, k.povpTrejdov.toFixed(0), "vij"), h("div", { class: "pod" }, `največ ${k.maxTrejdov}`))),
+      h("div", { class: "mreza" },
+        kartica("Po trajanju trejda", null, barlist(an.poTrajanju)),
+        kartica("Kateri trejd v dnevu", "Ali se rezultat slabša z vsakim naslednjim trejdom", barlist(an.zapStevilka.map((z) => ({ ...z, ime: z.ime + " trejd" })))),
+        kartica("Po izgubi in po dobitku", "Trejdi, odprti v 15 min po prejšnjem", barlist([{ ime: "Po izgubi", ...an.poIzgubi }, { ime: "Po dobitku", ...an.poDobitku }]))),
+      h("p", { class: "fine" }, "MAE/MFE in dejanski risk/reward potrebujeta stop loss in gibanje cene med trejdom, ki jih izvozi ne vsebujejo."),
+    ],
+    sim: () => [simKartica],
+    instr: () => [
+      h("div", { class: "mreza" },
+        st.simboli.length ? kartica("Instrumenti", null, barlist(st.simboli.slice(0, 12).map((x) => ({ ime: x.k, ...x })))) : null,
+        st.algoritmi.length && statFilter.algo === "vsi" ? kartica("Algoritmi", null, barlist(st.algoritmi.map((x) => ({ ime: x.k, ...x })))) : null,
+        racuni.length > 1 ? kartica("Računi", null, barlist(racuni.map((r) => { const x = izracunaj(izbrani.filter((t) => t.r === r)); return { ime: r, n: x.n, wr: x.wr, p: x.neto }; }).filter((x) => x.n))) : null,
+        kartica("Uvoženo", null, h("div", { class: "barlist" }, uvozi.map((u) => h("div", { class: "uvoz" },
+          h("div", {}, h("b", {}, u.racun + (u.algo ? " · " + u.algo : "") + (u.vrsta === "test" ? " · backtest" : "")), h("div", { class: "dim small" }, `${u.st} trejdov · ${u.ime} · ${u.kdo || ""} ${new Date(u.dodano).toLocaleDateString("sl-SI")}`)),
+          h("button", { class: "mini danger", onclick: async () => {
+            if (!confirm(`Odstranim uvoz »${u.ime}«?`)) return;
+            await spremeni((d) => (d.uvozi = (d.uvozi || []).filter((y) => y.id !== u.id)));
+            deleteObject(potDatoteke(trezor.id, u.id)).catch(() => {});
+            trejdiCache.delete(u.id);
+            seznam();
+          } }, "Odstrani")))))),
+      h("p", { class: "fine" }, "Isti trejdi v več uvozih se štejejo enkrat. Zneski so v valuti računa."),
+    ],
+  };
+  if (!oddelek[statOddelek]) statOddelek = "pregled";
+  zamenjaj(vsebina,
+    h("div", { class: "statglava" }, h("div", {}, ...filtri), h("nav", { class: "oddelki" }, ODDELKI.map(([k, ime, ik]) =>
+      h("button", { class: statOddelek === k ? "on" : "", onclick: () => ((statOddelek = k), seznam()) }, ikona(ik), ime)))),
+    ...oddelek[statOddelek]());
 }
 
 // Prebere datoteko (CSV, Excel, HTML) in poišče tabelo s trejdi. Vrne { vrstice, tab } ali null.
@@ -939,7 +1117,9 @@ function uvoziTrejde(datoteka) {
     const n = datoteka.name.toLowerCase(), k = r.toLowerCase();
     return n.includes(k.split(" ")[0]) || (/metatrader|mt5/.test(k) && /mt5|metatrader|report/.test(n));
   });
-  let racun = iz_imena || racuni[0] || "";
+  // Privzeto račun, na katerem trguje ta oseba (Tim → Bitunix, Teo → AMP).
+  const moj = racuni.find((r) => trgovalec({ racun: r }) === beriIme());
+  let racun = iz_imena || moj || racuni[0] || "";
   let algo = "", vrsta = "zivo";
   const znaniAlgo = [...new Set((podatki.uvozi || []).map((u) => u.algo).filter(Boolean))];
   let vrstice = null, tab = null, ime = "";

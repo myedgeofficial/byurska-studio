@@ -56,7 +56,7 @@ export function napredno(vsi) {
     c.p = krog(c.p + t.p);
   }
 
-  // Izvedba: koliko časa držita dobitke in izgube.
+  // Izvedba: koliko časa so odprti dobitki in izgube.
   const zT = trejdi.filter((t) => t.p > 0).map(minute).filter((m) => m != null && m >= 0);
   const pT = trejdi.filter((t) => t.p < 0).map(minute).filter((m) => m != null && m >= 0);
   const izvedba = { dobitki: mediana(zT), izgube: mediana(pT), povpDobitki: povprecje(zT), povpIzgube: povprecje(pT) };
@@ -119,19 +119,20 @@ export function simuliraj(vsi, pravila = {}) {
 }
 
 // Ugotovitve, kaj škodi in kaj pomaga (pravila nad številkami, brez zunanje storitve).
-export function coach(st, a, evri, odst) {
+export function coach(st, a, evri, odst, dva = false) {
   const skodi = [], pomaga = [];
+  const g = (ti, vama) => (dva ? vama : ti);
   const vsiPovp = a.vsi.povp;
   if (a.poIzgubi.n >= 5) {
     (a.poIzgubi.povp < vsiPovp && a.poIzgubi.p < 0 ? skodi : pomaga).push(`Trejdi v 15 min po izgubi (revenge): ${a.poIzgubi.n}×, skupaj ${evri(a.poIzgubi.p)}, uspešnost ${odst(a.poIzgubi.wr)}.`);
   }
   const { izvedba: iz } = a;
-  if (iz.izgube != null && iz.dobitki != null && iz.izgube > iz.dobitki * 1.5) skodi.push(`Izgube držita dlje kot dobitke (mediana ${trajanje(iz.izgube)} proti ${trajanje(iz.dobitki)}). Hitreje zapreta izgube ali pustita dobitke teči.`);
-  else if (iz.izgube != null && iz.dobitki != null && iz.dobitki > iz.izgube * 1.2) pomaga.push(`Dobitke držita dlje kot izgube (${trajanje(iz.dobitki)} proti ${trajanje(iz.izgube)}).`);
+  if (iz.izgube != null && iz.dobitki != null && iz.izgube > iz.dobitki * 1.5) skodi.push(`Izgube ${g("držiš", "držita")} dlje kot dobitke (mediana ${trajanje(iz.izgube)} proti ${trajanje(iz.dobitki)}). ${g("Hitreje zapri izgube ali pusti", "Hitreje zaprita izgube ali pustita")} dobitke teči.`);
+  else if (iz.izgube != null && iz.dobitki != null && iz.dobitki > iz.izgube * 1.2) pomaga.push(`Dobitke ${g("držiš", "držita")} dlje kot izgube (${trajanje(iz.dobitki)} proti ${trajanje(iz.izgube)}).`);
   const k = a.konsistenca;
   if (k.velikoSt >= 2 && k.velikoDni.povp < k.normalniDni.povp) skodi.push(`Overtrading: na ${k.velikoSt} dneh z veliko trejdi je povprečje ${evri(k.velikoDni.povp)}/trejd, na ostalih ${evri(k.normalniDni.povp)}.`);
   const pozni = a.zapStevilka.filter((z) => z.od >= 4 && z.n >= 5);
-  for (const z of pozni) if (z.p < 0) skodi.push(`${z.ime} trejd v dnevu je skupaj ${evri(z.p)} (${z.n}×). Razmisli o omejitvi trejdov na dan.`);
+  for (const z of pozni) if (z.p < 0) skodi.push(`${z.ime} trejd v dnevu je skupaj ${evri(z.p)} (${z.n}×). ${g("Razmisli", "Razmislita")} o omejitvi trejdov na dan.`);
   const prvi = a.zapStevilka.find((z) => z.od === 1);
   if (prvi && prvi.n >= 5 && prvi.p > 0) pomaga.push(`Prvi trejd v dnevu: ${evri(prvi.p)}, uspešnost ${odst(prvi.wr)}.`);
   const kz = [...a.killzone].filter((x) => x.n >= 5).sort((x, y) => y.p - x.p);
