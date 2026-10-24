@@ -376,7 +376,7 @@ function seznam() {
       ? h("div", { class: "list" }, prikazani.map((v) => vrstica(v)))
       : h("p", { class: "empty" }, q ? "Ni zadetkov." : "Tukaj še ni ničesar. Dodaj prvi vnos."),
     h("p", { class: "fine" }, posodobljeno ? `Zadnja sprememba: ${posodobljeno.toLocaleString("sl-SI")}` : ""),
-    h("button", { class: "fab", onclick: () => uredi(null) }, ikona("plus"), "Dodaj")
+    h("button", { class: "fab", onclick: meniDodaj }, ikona("plus"), "Dodaj")
   );
 }
 
@@ -755,13 +755,13 @@ async function statistikaZaslon() {
   const uvozi = podatki.uvozi || [];
   const vsebina = h("div", {}, h("div", { class: "spin" }));
   zaslon(glavaOdprta(), pozdrav(), zavihki(), vsebina,
-    h("button", { class: "fab", onclick: uvoziTrejde }, ikona("plus"), "Uvozi zgodovino"));
+    h("button", { class: "fab", onclick: () => uvoziTrejde() }, ikona("plus"), "Uvozi zgodovino"));
   if (!uvozi.length) {
     return zamenjaj(vsebina, h("div", { class: "card" },
       h("h1", {}, "Statistika trejdov"),
       h("p", { class: "muted" }, "Uvozi zgodovino trejdov iz platforme in tukaj dobita celotno statistiko z grafi: dobiček, uspešnost, najboljše in najslabše dni, ure in instrumente."),
       h("p", { class: "muted small" }, "MetaTrader 5: Zgodovina › desni klik › Poročilo › Excel ali HTML. AMP Futures: izpisek trejdov (Trade/Fill report) iz platforme kot CSV ali Excel. Bitonex: Zgodovina naročil › Izvozi (CSV)."),
-      h("button", { class: "btn", onclick: uvoziTrejde }, "Uvozi prvo zgodovino")));
+      h("button", { class: "btn", onclick: () => uvoziTrejde() }, "Uvozi prvo zgodovino")));
   }
   let vsi;
   try {
@@ -858,40 +858,50 @@ async function statistikaZaslon() {
   );
 }
 
-function uvoziTrejde() {
+// Prebere datoteko (CSV, Excel, HTML) in poišče tabelo s trejdi. Vrne { vrstice, tab } ali null.
+async function preberiTrejde(f) {
+  const bajti = new Uint8Array(await f.arrayBuffer());
+  // MetaTrader 5 shrani HTML poročilo v UTF-16, zato besedilo dekodiramo sami.
+  const utf16 = (bajti[0] === 0xff && bajti[1] === 0xfe) || (bajti[0] === 0xfe && bajti[1] === 0xff);
+  const wb = utf16 || /\.(html?|csv|txt)$/i.test(f.name)
+    ? beriTabelo(new TextDecoder(utf16 ? (bajti[0] === 0xff ? "utf-16le" : "utf-16be") : "utf-8").decode(bajti), { type: "string", cellDates: true, dense: true, raw: true })
+    : beriTabelo(bajti, { type: "array", cellDates: true, dense: true });
+  let naj = null;
+  for (const ime_ of wb.SheetNames) {
+    const v = tabelaUtils.sheet_to_json(wb.Sheets[ime_], { header: 1, raw: true, defval: "" });
+    const t = najdiTabelo(v);
+    if (t && t.vrstice.length && (!naj || t.vrstice.length > naj.tab.vrstice.length)) naj = { vrstice: v, tab: t };
+  }
+  return naj;
+}
+const jeTabela = (f) => /\.(csv|xlsx?|html?|txt)$/i.test(f.name);
+
+function uvoziTrejde(datoteka) {
   const racuni = podatki.vnosi.filter((v) => v.kat === "trgovanje").map((v) => v.naziv);
-  let racun = racuni[0] || "";
+  const iz_imena = datoteka && racuni.find((r) => {
+    const n = datoteka.name.toLowerCase(), k = r.toLowerCase();
+    return n.includes(k.split(" ")[0]) || (/metatrader|mt5/.test(k) && /mt5|metatrader|report/.test(n));
+  });
+  let racun = iz_imena || racuni[0] || "";
   let algo = "", vrsta = "zivo";
   const znaniAlgo = [...new Set((podatki.uvozi || []).map((u) => u.algo).filter(Boolean))];
   let vrstice = null, tab = null, ime = "";
   const predogled = h("div", {});
-  const izbira = h("input", { type: "file", accept: ".csv,.xlsx,.xls,.html,.htm,.txt", class: "hidden", onchange: async (e) => {
-    const f = e.target.files[0];
-    if (!f) return;
+  async function obdelaj(f) {
     ime = f.name;
     zamenjaj(predogled, h("div", { class: "spin" }));
     try {
-      const bajti = new Uint8Array(await f.arrayBuffer());
-      // MetaTrader 5 shrani HTML poročilo v UTF-16, zato besedilo dekodiramo sami.
-      const utf16 = (bajti[0] === 0xff && bajti[1] === 0xfe) || (bajti[0] === 0xfe && bajti[1] === 0xff);
-      const wb = utf16 || /\.(html?|csv|txt)$/i.test(f.name)
-        ? beriTabelo(new TextDecoder(utf16 ? (bajti[0] === 0xff ? "utf-16le" : "utf-16be") : "utf-8").decode(bajti), { type: "string", cellDates: true, dense: true, raw: true })
-        : beriTabelo(bajti, { type: "array", cellDates: true, dense: true });
-      let naj = null;
-      for (const ime_ of wb.SheetNames) {
-        const v = tabelaUtils.sheet_to_json(wb.Sheets[ime_], { header: 1, raw: true, defval: "" });
-        const t = najdiTabelo(v);
-        if (t && (!naj || t.vrstice.length > naj.tab.vrstice.length)) naj = { v, tab: t };
-      }
+      const naj = await preberiTrejde(f);
       if (!naj) throw new Error("ni tabele");
-      vrstice = naj.v;
+      vrstice = naj.vrstice;
       tab = naj.tab;
       narisi();
     } catch (err) {
       console.error(err);
       zamenjaj(predogled, h("p", { class: "err" }, "V datoteki nisem našel trejdov (stolpca s časom in dobičkom). Poskusi izvoz kot CSV ali Excel."));
     }
-  } });
+  }
+  const izbira = h("input", { type: "file", accept: ".csv,.xlsx,.xls,.html,.htm,.txt", class: "hidden", onchange: (e) => e.target.files[0] && obdelaj(e.target.files[0]) });
   const STOLPCI = [["cas", "Čas zaprtja"], ["odprto", "Čas odprtja"], ["sym", "Instrument"], ["smer", "Smer"], ["kol", "Količina"], ["pnl", "Dobiček / P&L"], ["prov", "Provizija"], ["swap", "Swap"], ["algo", "Algoritem (Magic/Comment)"]];
   function narisi() {
     const trejdi = vTrejde(tab.vrstice, tab.stolpci);
@@ -928,7 +938,7 @@ function uvoziTrejde() {
   }
   const s = list([
     h("div", { class: "row between" }, h("h1", {}, "Uvozi zgodovino"), h("button", { class: "iconbtn", "aria-label": "Zapri", onclick: () => (s.remove(), seznam()) }, ikona("zapri"))),
-    h("label", {}, "Račun", h("select", { onchange: (e) => ((racun = e.target.value), tab && narisi()) }, racuni.map((r) => h("option", { value: r }, r)))),
+    h("label", {}, "Račun", h("select", { onchange: (e) => ((racun = e.target.value), tab && narisi()) }, racuni.map((r) => h("option", { value: r, selected: r === racun }, r)))),
     !racuni.length && h("p", { class: "err" }, "Najprej dodaj trgovalni račun v kategoriji Trgovanje."),
     h("label", {}, "Vrsta", h("select", { onchange: (e) => (vrsta = e.target.value) },
       h("option", { value: "zivo" }, "Živo trgovanje (pravi ali demo račun)"),
@@ -941,7 +951,85 @@ function uvoziTrejde() {
     h("button", { class: "btn ghost", onclick: () => izbira.click() }, "Izberi datoteko"),
     predogled,
   ], seznam);
+  if (datoteka) obdelaj(datoteka);
 }
+
+/* ---------- Nalaganje datotek ---------- */
+
+function meniDodaj() {
+  const moznost = (ik, naslov, opis, klik) => h("button", { class: "option", onclick: () => (s.remove(), klik()) },
+    h("span", { class: "option-ik" }, ikona(ik)), h("span", { class: "grow" }, h("b", {}, naslov), h("span", { class: "dim small block" }, opis)));
+  const s = list([
+    h("div", { class: "row between" }, h("h1", {}, "Dodaj"), h("button", { class: "iconbtn", "aria-label": "Zapri", onclick: () => (s.remove(), seznam()) }, ikona("zapri"))),
+    moznost("prenos", "Naloži datoteke", "Pogodbe, licence, računi, potrdila o izplačilih, maili (PDF, slike …)", () => nalozi()),
+    moznost("trend", "Uvozi zgodovino trejdov", "Izvoz iz MT5, AMP ali Bitonexa za statistiko", () => uvoziTrejde()),
+    moznost("pero", "Nov vnos", "Geslo, račun, podatki ali opomba", () => uredi(null)),
+  ], seznam);
+}
+
+let odprtoNalaganje = null;
+function nalozi(zacetne = []) {
+  const vrsta = []; // { file, naziv, kat, trejdi }
+  const seznamEl = h("div", {});
+  const dodajDatoteke = async (files) => {
+    for (const file of files) {
+      if (file.size > NAJVEC_MB * 1048576) { obvestilo(`${file.name} je večja od ${NAJVEC_MB} MB`); continue; }
+      const z = { file, naziv: file.name.replace(/\.[^.]+$/, ""), kat: /racun|račun|invoice|payout|izplač|nakaz|potrdilo|receipt/i.test(file.name) ? "denar" : "dokumenti", trejdi: 0 };
+      vrsta.push(z);
+      if (jeTabela(file)) preberiTrejde(file).then((r) => ((z.trejdi = r ? vTrejde(r.tab.vrstice, r.tab.stolpci).length : 0), narisi())).catch(() => {});
+    }
+    narisi();
+  };
+  const narisi = () => zamenjaj(seznamEl, vrsta.map((z, i) => h("div", { class: "upl" },
+    h("div", { class: "row" }, h("span", { class: "upl-ik" }, ikona(z.trejdi ? "trend" : "dokument")), h("span", { class: "grow dim small" }, `${z.file.name} · ${velikost(z.file.size)}`),
+      h("button", { class: "mini icon", "aria-label": "Odstrani", onclick: () => (vrsta.splice(i, 1), narisi()) }, ikona("zapri"))),
+    z.trejdi ? h("div", { class: "hint" }, `To je zgodovina trejdov (${z.trejdi}).`,
+      h("button", { class: "mini", onclick: () => { vrsta.splice(i, 1); s.remove(); uvoziTrejde(z.file); } }, "Uvozi v statistiko")) : null,
+    h("input", { value: z.naziv, placeholder: "Naziv", oninput: (e) => (z.naziv = e.target.value) }),
+    h("select", { onchange: (e) => (z.kat = e.target.value) }, KATEGORIJE.map(([id, ime]) => h("option", { value: id, selected: z.kat === id }, ime))))),
+    !vrsta.length && h("p", { class: "muted small center" }, "Ni še izbranih datotek."));
+  const izbira = h("input", { type: "file", multiple: true, class: "hidden", onchange: (e) => (dodajDatoteke([...e.target.files]), (e.target.value = "")) });
+  const shrani = h("button", { class: "btn", onclick: async () => {
+    if (!vrsta.length) return obvestilo("Izberi datoteke");
+    shrani.disabled = true;
+    try {
+      const novi = [];
+      for (const [i, z] of vrsta.entries()) {
+        zamenjaj(shrani, `Nalagam ${i + 1}/${vrsta.length} …`);
+        const meta = { id: crypto.randomUUID(), ime: z.file.name, tip: z.file.type || "application/octet-stream", velikost: z.file.size };
+        await uploadBytes(potDatoteke(trezor.id, meta.id), await zakleniDatoteko(trezor, meta.id, new Uint8Array(await z.file.arrayBuffer())), { contentType: "application/octet-stream" });
+        novi.push({ id: crypto.randomUUID(), naziv: z.naziv.trim() || z.file.name, kat: z.kat, polja: [], datoteke: [meta], datum: z.kat === "denar" ? new Date().toISOString().slice(0, 10) : undefined, dodal: beriIme(), spremenjeno: Date.now() });
+      }
+      await spremeni((d) => d.vnosi.push(...novi));
+      s.remove();
+      filter.kat = "vse";
+      seznam();
+      obvestilo(novi.length === 1 ? "Datoteka naložena" : `Naloženih ${novi.length} datotek`);
+    } catch (err) {
+      console.error(err);
+      obvestilo("Nalaganje ni uspelo");
+      shrani.disabled = false;
+      zamenjaj(shrani, "Naloži");
+    }
+  } }, "Naloži");
+  const cona = h("button", { class: "drop", onclick: () => izbira.click() }, ikona("prenos"), h("b", {}, "Izberi datoteke"), h("span", { class: "dim small" }, "ali jih povleci sem · do 25 MB, šifrirano"));
+  const s = list([
+    h("div", { class: "row between" }, h("h1", {}, "Naloži datoteke"), h("button", { class: "iconbtn", "aria-label": "Zapri", onclick: () => (s.remove(), seznam()) }, ikona("zapri"))),
+    izbira, cona, seznamEl, shrani,
+  ], seznam);
+  narisi();
+  odprtoNalaganje = { s, dodaj: dodajDatoteke };
+  if (zacetne.length) dodajDatoteke(zacetne);
+}
+
+// Povleci in spusti datoteke kamorkoli na stran.
+window.addEventListener("dragover", (e) => { if (trezor && e.dataTransfer?.types?.includes("Files")) e.preventDefault(); });
+window.addEventListener("drop", (e) => {
+  if (!trezor || !e.dataTransfer?.files?.length) return;
+  e.preventDefault();
+  if (odprtoNalaganje && document.body.contains(odprtoNalaganje.s)) odprtoNalaganje.dodaj([...e.dataTransfer.files]);
+  else nalozi([...e.dataTransfer.files]);
+});
 
 // Šifrirana kopija v datoteki: odpre se samo s kodo, ki je veljala ob prenosu.
 function varnostnaKopija() {
