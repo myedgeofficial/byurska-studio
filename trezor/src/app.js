@@ -4,7 +4,7 @@
 import { initializeApp } from "firebase/app";
 import { initializeFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, onSnapshot, runTransaction, serverTimestamp } from "firebase/firestore";
 import { getStorage, connectStorageEmulator, ref as sref, uploadBytes, getBytes, deleteObject } from "firebase/storage";
-import { getAuth, connectAuthEmulator, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "firebase/auth";
+import { getAuth, connectAuthEmulator, GoogleAuthProvider, signInWithPopup, signInWithCredential, onAuthStateChanged, signOut } from "firebase/auth";
 import { read as beriTabelo, utils as tabelaUtils } from "xlsx";
 import { najdiTabelo, vTrejde, ugani, statistika as izracunaj, kljucTrejda, DNEVI, MESECI } from "./trejdi.js";
 import { krivulja, stolpci, toplota, vecKrivulj, nalozeniStolpci, krof, koledar, obroc, merilnik, iskrica, trak } from "./grafi.js";
@@ -23,6 +23,8 @@ if (location.hostname === "localhost") {
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
   connectStorageEmulator(shramba, "127.0.0.1", 9199);
   connectAuthEmulator(avt, "http://127.0.0.1:9099", { disableWarnings: true });
+  // Emulator sprejme nepodpisan Google žeton (Googlovo okno v preizkusu ni dosegljivo).
+  window.__prijavaTest = (email) => signInWithCredential(avt, GoogleAuthProvider.credential(JSON.stringify({ sub: email, email, email_verified: true })));
 }
 // Prvi korak: prijava z Google računom. Baza (pravila) dovoli samo ta dva naslova; tukaj samo za prijazno sporočilo.
 const DOVOLJENI = ["teo.simonic7@gmail.com", "tim.petrovic@gmail.com"];
@@ -92,6 +94,9 @@ function h(tag, lastnosti = {}, ...otroci) {
 const zamenjaj = (el, ...otroci) => el.replaceChildren(...otroci.flat(Infinity).filter((o) => o != null && o !== false));
 const zaslon = (...vsebina) => {
   if (igra) { igra.ustavi(); igra = null; }
+  if (pogled === "banka") izBanke = false;
+  document.querySelector(".nazaj-banka")?.remove();
+  if (izBanke && trezor) document.body.append(h("button", { class: "nazaj-banka", onclick: nazajVBanko }, "← Nazaj v banko"));
   const plosca = vsebina.some((x) => x?.classList?.contains("dash"));
   app.classList.toggle("siroko", (pogled === "statistika" || pogled === "remako") && vsebina.some((x) => x?.classList?.contains("tabs")));
   app.classList.toggle("dash-mode", plosca);
@@ -444,6 +449,9 @@ function seznam() {
 /* ---------- 3D banka: figurica v lobiju ---------- */
 
 let bankaBrez3D = false;
+let izBanke = false; // pogled je bil odprt iz 3D banke: pokaži »Nazaj v banko«
+function nazajVBanko() { izBanke = false; pogled = "banka"; seznam(); window.scrollTo(0, 0); }
+addEventListener("popstate", () => { if (izBanke && trezor && pogled !== "banka") nazajVBanko(); });
 async function igraZaslon() {
   const ovoj = h("div", { class: "igra" }, h("div", { class: "igra-nalaganje" }, h("div", { class: "spin" }), h("span", {}, "Odpiram banko …")));
   zaslon(glavaOdprta(), zavihki(), ovoj);
@@ -476,23 +484,31 @@ async function igraZaslon() {
   const stAlgo = new Set(algo.map((t) => t.a).filter(Boolean)).size;
   const PRAG = 5000;
 
-  const pojdi = (fn) => () => { fn(); seznam(); window.scrollTo(0, 0); };
+  const pojdi = (fn) => () => { fn(); izBanke = true; history.pushState({ izBanke: 1 }, ""); seznam(); window.scrollTo(0, 0); };
   const vStat = (racun) => pojdi(() => { pogled = "statistika"; statOddelek = "pregled"; statFilter.racun = racun; statFilter.algo = "vsi"; statFilter.vrsta = "zivo"; });
   const vTrezor = (kat) => pojdi(() => { pogled = "trezor"; filter.kat = kat; filter.isci = ""; });
   const vRemako = pojdi(() => { pogled = "remako"; remakoOddelek = "pregled"; });
+  const ton = (v) => (v > 0 ? "pos" : v < 0 ? "neg" : "");
+  const danes = new Date().toISOString().slice(0, 10);
   const miza = (ime, oseba, barva, a, p, racun) => {
     const n = nivo(Math.max(0, p));
-    return { ime, oseba, vrsta: "miza", barva, glavno: znak(p), barvaGlavno: barvaPnl(p), pod: `${a.length} trejdov · uspešnost ${wr(a)} · ${racun}`, oznaka: `Nv. ${n.n}`, napredek: n.napredek, klik: vStat("oseba:" + oseba) };
+    const pDanes = vsota(a.filter((t) => t.t.slice(0, 10) === danes));
+    return { ime, oseba, vrsta: "miza", barva, glavno: znak(p), barvaGlavno: barvaPnl(p), pod: `${a.length} trejdov · uspešnost ${wr(a)} · ${racun}`, oznaka: `Nv. ${n.n}`, napredek: n.napredek, klik: vStat("oseba:" + oseba),
+      povzetek: [["Profit", znak(p), ton(p)], ["Danes", znak(pDanes), ton(pDanes)], ["Uspešnost", wr(a)], ["Nivo", `${n.n}`]],
+      opomba: p >= PRAG ? "Lastno nadstropje je odklenjeno, pelje te dvigalo." : `Lastno nadstropje se odklene pri ${evri(PRAG)} profita, manjka še ${evri(Math.max(0, PRAG - p))}.`, gumb: "Odpri statistiko →" };
   };
   const oddelki = [
     miza("Miza Teo", "Teo", "#a78bfa", teo, pTeo, "AMP"),
-    { ime: "Analitika", vrsta: "analitika", barva: "#60a5fa", glavno: `${trejdi.length} trejdov`, pod: `${uvozi.length} zgodovin · statistika, simulator`, klik: pojdi(() => { pogled = "statistika"; statOddelek = "instr"; statFilter.racun = "vsi"; }) },
-    { ime: "Papirologija", vrsta: "papir", barva: "#f5d08a", glavno: String(dokumenti.length), oznaka: kmalu.length ? `${kmalu.length} poteka` : "", pod: kmalu.length ? `Kmalu poteče: ${kmalu.map((v) => v.naziv).join(", ")}` : "pogodbe, licence, dovoljenja", klik: vTrezor("dokumenti") },
-    { ime: "Podatki REMAKO", vrsta: "podatki", barva: "#c4b5fd", glavno: String(stPodatkov), pod: "naslov, matična, davčna, banka", klik: vTrezor("podjetje") },
+    { ime: "Analitika", vrsta: "analitika", barva: "#60a5fa", glavno: `${trejdi.length} trejdov`, pod: `${uvozi.length} zgodovin · statistika, simulator`,
+      povzetek: [["Skupaj", znak(skupaj), ton(skupaj)], ["Trejdov", String(trejdi.length)], ["Uspešnost", wr(trejdi)], ["Zgodovin", String(uvozi.length)]], gumb: "Odpri analitiko →", klik: pojdi(() => { pogled = "statistika"; statOddelek = "instr"; statFilter.racun = "vsi"; }) },
+    { ime: "Papirologija", vrsta: "papir", barva: "#f5d08a", glavno: String(dokumenti.length), oznaka: kmalu.length ? `${kmalu.length} poteka` : "", pod: kmalu.length ? `Kmalu poteče: ${kmalu.map((v) => v.naziv).join(", ")}` : "pogodbe, licence, dovoljenja",
+      povzetek: [["Dokumentov", String(dokumenti.length)], ["Poteče v 30 dneh", String(kmalu.length), kmalu.length ? "neg" : ""]], opomba: kmalu.length ? `Kmalu poteče: ${kmalu.map((v) => v.naziv).join(", ")}` : "Pogodbe, licence in dovoljenja.", gumb: "Odpri dokumente →", klik: vTrezor("dokumenti") },
+    { ime: "Podatki REMAKO", vrsta: "podatki", barva: "#c4b5fd", glavno: String(stPodatkov), pod: "naslov, matična, davčna, banka", povzetek: [["Vnosov", String(stPodatkov)]], opomba: "Naslov, matična in davčna številka, banka.", gumb: "Odpri podatke →", klik: vTrezor("podjetje") },
     miza("Miza Tim", "Tim", "#f472b6", tim, pTim, "Bitunix"),
-    { ime: "Algoritmi MT5", vrsta: "algo", barva: "#22d3ee", glavno: algo.length ? znak(pAlgo) : "Še ni strategij", barvaGlavno: algo.length ? barvaPnl(pAlgo) : null, pod: algo.length ? `${stAlgo || 1} strategij · ${algo.length} trejdov` : "avtomatsko trgovanje Teo + Tim", klik: mt5 ? vStat(mt5.naziv) : vStat("vsi") },
-    { ime: "Blagajna · payouti", vrsta: "blagajna", barva: "#fbbf24", glavno: evri(izplacano), pod: `${denar.length} izplačil in nakazil`, klik: vTrezor("denar") },
-    { ime: "Sef · gesla", vrsta: "sef", barva: "#34d399", glavno: String(stGesel), pod: "uporabniška imena, gesla, računi", klik: vTrezor("gesla") },
+    { ime: "Algoritmi MT5", vrsta: "algo", barva: "#22d3ee", glavno: algo.length ? znak(pAlgo) : "Še ni strategij", barvaGlavno: algo.length ? barvaPnl(pAlgo) : null, pod: algo.length ? `${stAlgo || 1} strategij · ${algo.length} trejdov` : "avtomatsko trgovanje Teo + Tim",
+      povzetek: algo.length ? [["Profit", znak(pAlgo), ton(pAlgo)], ["Strategij", String(stAlgo || 1)], ["Trejdov", String(algo.length)]] : [["Strategij", "0"]], opomba: algo.length ? null : "Ko naložita zgodovino MT5, se strategije prikažejo tukaj.", gumb: "Odpri algoritme →", klik: mt5 ? vStat(mt5.naziv) : vStat("vsi") },
+    { ime: "Blagajna · payouti", vrsta: "blagajna", barva: "#fbbf24", glavno: evri(izplacano), pod: `${denar.length} izplačil in nakazil`, povzetek: [["Izplačano", evri(izplacano), "pos"], ["Vnosov", String(denar.length)]], gumb: "Odpri payoute →", klik: vTrezor("denar") },
+    { ime: "Sef · gesla", vrsta: "sef", barva: "#34d399", glavno: String(stGesel), pod: "uporabniška imena, gesla, računi", povzetek: [["Gesel in računov", String(stGesel)]], opomba: "Uporabniška imena, gesla in dostopi do računov.", gumb: "Odpri sef →", klik: vTrezor("gesla") },
   ];
   const nad = (ime, p, klik) => ({ ime, odklenjeno: p >= PRAG, opis: p >= PRAG ? `${znak(p)} · odklenjeno` : `Odklene se pri ${evri(PRAG)} · še ${evri(Math.max(0, PRAG - p))}`, klik });
   const nadstropja = [
