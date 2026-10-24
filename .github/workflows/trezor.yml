@@ -45,12 +45,15 @@ jobs:
           gcloud auth activate-service-account --key-file="$RUNNER_TEMP/sa.json" --quiet
           B="gs://$P.firebasestorage.app"
           gcloud storage buckets describe "$B" --format='json(cors_config)' > "$RUNNER_TEMP/cors-zdaj.json" || echo '{}' > "$RUNNER_TEMP/cors-zdaj.json"
-          python3 - "$RUNNER_TEMP/cors-zdaj.json" "$RUNNER_TEMP/cors.json" "https://$STRAN.web.app" <<'PY'
+          python3 - "$RUNNER_TEMP/cors-zdaj.json" "$RUNNER_TEMP/cors.json" "https://$STRAN.web.app" "https://${{ vars.TREZOR_DOMENA || 'banka.remako.si' }}" <<'PY'
           import json, sys
           zdaj = (json.load(open(sys.argv[1])) or {}).get("cors_config") or []
           izvor = sys.argv[3]
           if not any(izvor in (p.get("origin") or []) for p in zdaj):
               zdaj.append({"origin": [izvor, "https://" + izvor.split("//")[1].replace(".web.app", ".firebaseapp.com")], "method": ["GET"], "maxAgeSeconds": 3600, "responseHeader": ["Content-Type"]})
+          for p in zdaj:
+              if izvor in (p.get("origin") or []) and sys.argv[4] not in p["origin"]:
+                  p["origin"].append(sys.argv[4])
           json.dump(zdaj, open(sys.argv[2], "w"))
           print("CORS:", json.dumps(zdaj))
           PY
@@ -60,6 +63,23 @@ jobs:
           (cd trezor && npm run build)
           $FB hosting:sites:get "$STRAN" > /dev/null 2>&1 || $FB hosting:sites:create "$STRAN"
           (cd trezor && $FB deploy --only hosting --force)
+
+          # Lastna domena (npr. banka.remako.si): dodamo jo strani in izpišemo DNS zapise, ki jih je treba vpisati v FreeDNS.
+          DOMENA="${{ vars.TREZOR_DOMENA || 'banka.remako.si' }}"
+          TOK=$(gcloud auth print-access-token)
+          API="https://firebasehosting.googleapis.com/v1beta1/projects/$P/sites/$STRAN/customDomains"
+          curl -s -o /dev/null -w "Dodajanje domene: HTTP %{http_code}\n" -X POST -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" -d '{}' "$API?customDomainId=$DOMENA" || true
+          curl -s -H "Authorization: Bearer $TOK" "$API/$DOMENA" > "$RUNNER_TEMP/domena.json" || true
+          python3 - "$RUNNER_TEMP/domena.json" <<'PY'
+          import json, sys
+          d = json.load(open(sys.argv[1]))
+          print("Domena:", d.get("name", "?").split("/")[-1], "| stanje:", d.get("hostState"), "| lastništvo:", d.get("ownershipState"), "| certifikat:", (d.get("cert") or {}).get("state"))
+          for skupina in ("requiredDnsUpdates",):
+              for zbirka in (d.get(skupina) or {}).get("desired", []):
+                  for z in zbirka.get("records", []):
+                      print("ZAPIS:", zbirka.get("domainName"), z.get("type"), z.get("rdata"), "->", z.get("requiredAction", "ADD"))
+          if d.get("error"): print("NAPAKA:", json.dumps(d["error"]))
+          PY
           rm -f "$RUNNER_TEMP/sa.json"
 
           # Preveri, da spletni ključ deluje z novega naslova (ključ je lahko omejen na znane strani).
