@@ -961,7 +961,8 @@ async function statistikaZaslon() {
       h("button", { class: statFilter.vrsta === "test" ? "on" : "", onclick: () => ((statFilter.vrsta = "test"), seznam()) }, "Backtesti")) : null,
     h("div", { class: "chips" }, osebe.map((o) => cip(statFilter.racun === "oseba:" + o, o === jaz ? `Moja (${o})` : o, () => ((statFilter.racun = "oseba:" + o), seznam()))),
       cip(statFilter.racun === "vsi", "Vsi", () => ((statFilter.racun = "vsi"), seznam())),
-      racuni.map((r) => cip(statFilter.racun === r, r, () => ((statFilter.racun = r), seznam())))),
+      // Posamezne račune pokažemo le, če ima ista oseba več računov (sicer je isto kot izbira osebe).
+      osebe.flatMap((o) => { const rr = racuni.filter((r) => osebaRacuna(r) === o); return rr.length > 1 ? rr.map((r) => cip(statFilter.racun === r, r, () => ((statFilter.racun = r), seznam()))) : []; })),
     algoritmi.length ? h("div", { class: "chips" }, cip(statFilter.algo === "vsi", "Vsi algoritmi", () => ((statFilter.algo = "vsi"), seznam())),
       algoritmi.map((a) => cip(statFilter.algo === a, [ikona("robot"), a], () => ((statFilter.algo = a), seznam())))) : null,
     h("div", { class: "chips" }, [["vse", "Ves čas"], ["30", "30 dni"], ["90", "90 dni"], ["leto", "Letos"]].map(([k, ime]) => cip(statFilter.obdobje === k, ime, () => ((statFilter.obdobje = k), seznam())))),
