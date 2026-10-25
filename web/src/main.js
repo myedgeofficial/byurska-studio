@@ -450,8 +450,8 @@ function mojeNaloge() {
     const odprta = mojePrikaz.odprte.has(n.id), vec = String(n.besedilo).trim().includes("\n") || String(n.besedilo).length > 70;
     return `<div class="mn${odprta ? " odprta" : ""}" style="--c:${barvaClana(n.za)}">
     <button class="kljuk" data-mk="${esc(n.mapa)}/${esc(n.id)}" aria-label="Narejeno" aria-pressed="false"></button>
-    <button class="mn-t" data-mo="${esc(n.id)}" title="${vec ? (odprta ? "Skrij" : "Pokaži vse") : ""}">${esc(odprta ? n.besedilo : prvaVrstica(n.besedilo))}${vec && !odprta ? " …" : ""}</button>
-    <button class="mn-m" data-mm="${esc(n.mapa)}" title="Odpri mapo">${esc(kratkoIme(imeMape(n.mapa)).ime)}</button></div>`;
+    <div class="mn-b"><button class="mn-t" data-mo="${esc(n.id)}" title="${vec ? (odprta ? "Skrij" : "Pokaži vse") : ""}">${esc(odprta ? n.besedilo : prvaVrstica(n.besedilo))}${vec && !odprta ? " …" : ""}</button>
+    ${metaNaloge(n)}</div></div>`;
   }).join("") : `<div class="empty">Nimaš odprtih nalog.</div>`}
     ${moje.length > 3 ? `<button class="mn-vec" id="mojeVec">${mojePrikaz.vse ? "Pokaži manj" : `Še ${moje.length - 3}`}</button>` : ""}</div>`}`;
 }
@@ -473,6 +473,15 @@ function vezMojeNaloge() {
   view.querySelectorAll("[data-mm]").forEach((b) => (b.onclick = () => pojdi("mapa", { mapa: b.dataset.mm, zavihek: "todo" })));
 }
 
+// Pod nalogo na domačem zaslonu: kdo jo je dal, komu je, (kdo jo je opravil) in mapa.
+const osebaMeta = (e, ime) => `<b class="kdo" style="--c:${barvaClana(e)}">${esc(ime)}</b>`;
+function metaNaloge(n, opravljeno) {
+  const od = n.dodal ? `Od ${osebaMeta(n.dodal, n.dodal === jaz ? "tebe" : imeClana(n.dodal))} <span class="pus">→</span> za ` : "Za ";
+  const za = n.za ? osebaMeta(n.za, n.za === jaz ? "tebe" : imeClana(n.za)) : osebaMeta("", "vse");
+  const kdo = opravljeno && n.narejenoKdo ? `<span class="mn-ok">✓ Opravljeno: ${osebaMeta(n.narejenoKdo, imeClana(n.narejenoKdo))}</span>` : "";
+  return `<div class="mn-meta"><span>${od}${za}</span>${kdo}<button class="mn-mm" data-mm="${esc(n.mapa)}" title="Odpri mapo">${ico.mapa}${esc(kratkoIme(imeMape(n.mapa)).ime)}</button></div>`;
+}
+
 const oznaciNarejeno = (da) => (da ? { narejeno: true, narejenoKdo: jaz, narejenoOb: Date.now(), pregledal: [] } : { narejeno: false, pregledal: [] });
 const prvaVrstica = (t) => String(t).split("\n").map((x) => x.trim()).find(Boolean) || "";
 
@@ -485,7 +494,7 @@ function zaPregled() {
     return `<div class="mn${odprta ? " odprta" : ""}" style="--c:${barvaClana(n.narejenoKdo)}"><div class="mn-b">
     <button class="mn-t" data-mo="${esc(n.id)}">${esc(odprta ? n.besedilo : prvaVrstica(n.besedilo))}${vec && !odprta ? " …" : ""}</button>
     ${odprta && n.porocilo ? `<div class="porocilo">${esc(n.porocilo)}</div>` : ""}
-    <small><span class="oseba" style="--c:${barvaClana(n.narejenoKdo)}">${esc(imeClana(n.narejenoKdo))}</span><button class="mn-mm" data-mm="${esc(n.mapa)}">${esc(kratkoIme(imeMape(n.mapa)).ime)}</button></small></div>
+    ${metaNaloge(n, true)}</div>
     <button class="pregledano" data-pr="${esc(n.mapa)}/${esc(n.id)}">Pregledano</button></div>`;
   }).join("")}</div>`;
 }
