@@ -12,7 +12,7 @@ import {
 import { getStorage, ref, uploadBytesResumable, uploadBytes, getDownloadURL, deleteObject, connectStorageEmulator } from "firebase/storage";
 import {
   ZACETNI_CLANI, ZACETNE_MAPE, PLATFORME, platformeIme, drevo, dan, ura, pozdrav, kdajBesedilo, opomnikiZa, PRIVZETI_OPOMNIKI, opisOpomnikov, OPOMNI_PRI_OBJAVI, PRIVZETO_OPOMNI, opisOpomni,
-  vrstaDatoteke, velikost, veljavenEmail, nujnost, znesek, evri, kratkoIme, ikonaMape, todoOseba, stevilo, ics, barvaClana, nalogaZa, odgovoren, vidiObjave
+  vrstaDatoteke, velikost, veljavenEmail, nujnost, znesek, evri, kratkoIme, ikonaMape, todoOseba, stevilo, ics, barvaClana, nalogaZa, odgovoren, vidiObjave, rokNaloge
 } from "./data.js";
 import { novaSol, kljucIzGesla, zakleni, odkleni, preveritev, pravilen } from "./trezor.js";
 
@@ -213,7 +213,7 @@ function prestejNaloge() {
   const po = {}, vse = [...skupneNaloge, ...mojeNaloge0];
   S.vseNaloge = vse.filter((n) => !n.narejeno).sort((a, b) => a.ob - b.ob);
   // Opravljeno delo drugih (zadnjih 14 dni), ki ga še nisem pregledal.
-  S.zaPregled = vse.filter((n) => n.narejeno && n.narejenoOb > Date.now() - 14 * 864e5 && n.narejenoKdo && n.narejenoKdo !== jaz && !(n.pregledal || []).includes(jaz))
+  S.zaPregled = vse.filter((n) => n.narejeno && n.narejenoOb > Date.now() - SKRIJ_OPRAVLJENO && n.narejenoKdo && n.narejenoKdo !== jaz && !(n.pregledal || []).includes(jaz))
     .sort((a, b) => b.narejenoOb - a.narejenoOb);
   for (const n of vse) {
     if (n.narejeno) continue;
@@ -443,17 +443,19 @@ function renderDomov() {
 // Prikaz Mojih nalog na tej napravi: skrite (zložene), razširjene naloge in ali so prikazane vse.
 const mojePrikaz = { skrito: (() => { try { return localStorage.getItem("mojeSkrito") === "1"; } catch { return false; } })(), odprte: new Set(), vse: false };
 function mojeNaloge() {
-  const moje = S.vseNaloge.filter((n) => nalogaZa(n, jaz) && mapa(n.mapa) && !zaklenjena(mapa(n.mapa)));
+  const rokMs = (n) => rokNaloge(n.rok)?.ms ?? Infinity;
+  const moje = S.vseNaloge.filter((n) => nalogaZa(n, jaz) && mapa(n.mapa) && !zaklenjena(mapa(n.mapa))).sort((a, b) => rokMs(a) - rokMs(b));
   const prikaz = mojePrikaz.vse ? moje : moje.slice(0, 3);
   return `<button class="sek-h moje-glava" id="mojeG" aria-expanded="${!mojePrikaz.skrito}"><span class="sek-i">${ico.naloge}</span><h2>Moje naloge</h2>${moje.length ? `<span class="st">${moje.length}</span>` : ""}<span class="chev2">${ico.chev}</span></button>
   ${mojePrikaz.skrito ? "" : `<div class="list moje">${prikaz.length ? prikaz.map((n) => {
     const odprta = mojePrikaz.odprte.has(n.id), vec = String(n.besedilo).trim().includes("\n") || String(n.besedilo).length > 70;
     return `<div class="mn${odprta ? " odprta" : ""}" style="--c:${barvaClana(n.za)}">
     <button class="kljuk" data-mk="${esc(n.mapa)}/${esc(n.id)}" aria-label="Narejeno" aria-pressed="false"></button>
-    <button class="mn-t" data-mo="${esc(n.id)}" title="${vec ? (odprta ? "Skrij" : "Pokaži vse") : ""}">${esc(odprta ? n.besedilo : prvaVrstica(n.besedilo))}${vec && !odprta ? " …" : ""}</button>
-    <button class="mn-m" data-mm="${esc(n.mapa)}" title="Odpri mapo">${esc(kratkoIme(imeMape(n.mapa)).ime)}</button></div>`;
+    <div class="mn-b"><button class="mn-t" data-mo="${esc(n.id)}" title="${vec ? (odprta ? "Skrij" : "Pokaži vse") : ""}">${esc(odprta ? n.besedilo : prvaVrstica(n.besedilo))}${vec && !odprta ? " …" : ""}</button>
+    ${metaNaloge(n)}</div></div>`;
   }).join("") : `<div class="empty">Nimaš odprtih nalog.</div>`}
-    ${moje.length > 3 ? `<button class="mn-vec" id="mojeVec">${mojePrikaz.vse ? "Pokaži manj" : `Še ${moje.length - 3}`}</button>` : ""}</div>`}`;
+    ${moje.length > 3 ? `<button class="mn-vec" id="mojeVec">${mojePrikaz.vse ? "Pokaži manj" : `Še ${moje.length - 3}`}</button>` : ""}</div>
+    <div class="hitra"><input id="hn" maxlength="2000" placeholder="Nova naloga, ki ni za nobeno mapo …" enterkeyhint="done"><button class="plusbtn" id="hnd" aria-label="Dodaj nalogo">${ico.plus}</button></div>`}`;
 }
 function vezMojeNaloge() {
   $("mojeG").onclick = () => {
@@ -462,6 +464,26 @@ function vezMojeNaloge() {
     osvezi();
   };
   if ($("mojeVec")) $("mojeVec").onclick = () => { mojePrikaz.vse = !mojePrikaz.vse; osvezi(); };
+  // Hitra naloga z domačega zaslona gre v mapo »TO DO Splošno« (vidijo jo vsi, v Mapah pod TO DO).
+  if ($("hn")) {
+    $("hn").value = osnutek.hn || "";
+    $("hn").oninput = () => (osnutek.hn = $("hn").value);
+    const dodaj = () => {
+      const besedilo = $("hn").value.trim();
+      if (!besedilo) return toast("Napiši, kaj je treba narediti.");
+      $("hn").blur();
+      komuNaloga(besedilo, async (za, rok) => {
+        $("hn").value = osnutek.hn = "";
+        try {
+          const id = await mapaSplosno();
+          await addDoc(zbirka(id, "naloge"), { besedilo, strosek: 0, za, rok, dodal: jaz, ob: Date.now(), ...oznaciNarejeno(false) });
+          toast(za ? `Naloga je za: ${imeClana(za)}` : "Naloga je za vse");
+        } catch (e) { napaka(e); }
+      });
+    };
+    $("hnd").onclick = dodaj;
+    $("hn").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); dodaj(); } };
+  }
   view.querySelectorAll("[data-mo]").forEach((b) => (b.onclick = () => {
     const id = b.dataset.mo; mojePrikaz.odprte.has(id) ? mojePrikaz.odprte.delete(id) : mojePrikaz.odprte.add(id); osvezi();
   }));
@@ -471,6 +493,28 @@ function vezMojeNaloge() {
     updateDoc(dok(mid, "naloge", nid), { ...oznaciNarejeno(true), uredil: jaz }).then(() => toast("Narejeno")).catch(napaka);
   }));
   view.querySelectorAll("[data-mm]").forEach((b) => (b.onclick = () => pojdi("mapa", { mapa: b.dataset.mm, zavihek: "todo" })));
+}
+
+// Pod nalogo na domačem zaslonu: kdo jo je dal, komu je, (kdo jo je opravil) in mapa.
+const osebaMeta = (e, ime) => `<b class="kdo" style="--c:${barvaClana(e)}">${esc(ime)}</b>`;
+function metaNaloge(n, opravljeno) {
+  const od = n.dodal ? `Od ${osebaMeta(n.dodal, n.dodal === jaz ? "tebe" : imeClana(n.dodal))} <span class="pus">→</span> za ` : "Za ";
+  const za = n.za ? osebaMeta(n.za, n.za === jaz ? "tebe" : imeClana(n.za)) : osebaMeta("", "vse");
+  const kdo = opravljeno && n.narejenoKdo ? `<span class="mn-ok">✓ Opravljeno: ${osebaMeta(n.narejenoKdo, imeClana(n.narejenoKdo))}</span>` : "";
+  const r = !opravljeno && rokNaloge(n.rok);
+  return `<div class="mn-meta"><span>${od}${za}</span>${r ? `<span class="rok ${r.nujnost}">${esc(r.besedilo)}</span>` : ""}${kdo}<button class="mn-mm" data-mm="${esc(n.mapa)}" title="Odpri mapo">${ico.mapa}${esc(kratkoIme(imeMape(n.mapa)).ime)}</button></div>`;
+}
+
+// Opravljene naloge po 2 dneh izginejo s seznamov (ostanejo v bazi, da stroški ostanejo pravilni).
+const SKRIJ_OPRAVLJENO = 2 * 864e5;
+const seVidi = (n) => !n.narejeno || !n.narejenoOb || n.narejenoOb > Date.now() - SKRIJ_OPRAVLJENO;
+// Mapa za naloge brez mape: »TO DO Splošno« ob drugih TO DO mapah; ustvari se ob prvi hitri nalogi.
+async function mapaSplosno() {
+  const obstojeca = S.mape.find((m) => todoOseba(m.ime) === "Splošno");
+  if (obstojeca) return obstojeca.id;
+  const oce = S.mape.find((m) => todoOseba(m.ime) && m.oce)?.oce || null;
+  const d = await addDoc(collection(db, "mape"), { ime: "TO DO Splošno", url: null, oce, ikona: "📝", red: 0 });
+  return d.id;
 }
 
 const oznaciNarejeno = (da) => (da ? { narejeno: true, narejenoKdo: jaz, narejenoOb: Date.now(), pregledal: [] } : { narejeno: false, pregledal: [] });
@@ -485,7 +529,7 @@ function zaPregled() {
     return `<div class="mn${odprta ? " odprta" : ""}" style="--c:${barvaClana(n.narejenoKdo)}"><div class="mn-b">
     <button class="mn-t" data-mo="${esc(n.id)}">${esc(odprta ? n.besedilo : prvaVrstica(n.besedilo))}${vec && !odprta ? " …" : ""}</button>
     ${odprta && n.porocilo ? `<div class="porocilo">${esc(n.porocilo)}</div>` : ""}
-    <small><span class="oseba" style="--c:${barvaClana(n.narejenoKdo)}">${esc(imeClana(n.narejenoKdo))}</span><button class="mn-mm" data-mm="${esc(n.mapa)}">${esc(kratkoIme(imeMape(n.mapa)).ime)}</button></small></div>
+    ${metaNaloge(n, true)}</div>
     <button class="pregledano" data-pr="${esc(n.mapa)}/${esc(n.id)}">Pregledano</button></div>`;
   }).join("")}</div>`;
 }
@@ -996,10 +1040,10 @@ const izbranZa = (id) => document.querySelector(`#${id} [aria-pressed="true"]`)?
 const oznakaZa = (n) => `<span class="oseba" style="--c:${barvaClana(n.za)}">${esc(n.za ? imeClana(n.za) : "Vsi")}</span>`;
 
 function renderNaloge(el, m) {
-  const odprte = M.naloge.filter((n) => !n.narejeno), narejene = M.naloge.filter((n) => n.narejeno);
+  const odprte = M.naloge.filter((n) => !n.narejeno), narejene = M.naloge.filter((n) => n.narejeno && seVidi(n));
   const vsota = (a) => a.reduce((s, n) => s + (n.strosek || 0), 0);
   const stanje = (n) => {
-    if (!n.narejeno) return oznakaZa(n);
+    if (!n.narejeno) { const r = rokNaloge(n.rok); return oznakaZa(n) + (r ? `<span class="rok ${r.nujnost}">${esc(r.besedilo)}</span>` : ""); }
     const kdo = n.narejenoKdo || n.uredil, pr = (n.pregledal || []).filter((e) => e !== kdo);
     return `<span class="oseba" style="--c:${barvaClana(kdo)}">${esc(imeClana(kdo))}</span>${pr.length ? `<span class="ok" title="${esc(pr.map(imeClana).join(", "))}">pregledano</span>` : n.narejenoKdo ? `<span class="caka">čaka pregled</span>` : ""}`;
   };
@@ -1026,10 +1070,10 @@ function renderNaloge(el, m) {
     const besedilo = $("tn").value.trim();
     if (!besedilo) return toast(opravljeno ? "Napiši, kaj je narejeno." : "Napiši, kaj je treba narediti.");
     const strosek = znesek($("tz").value);
-    const shrani = (za) => {
+    const shrani = (za, rok = "") => {
       // Polji izpraznimo takoj, da se medtem lahko že piše naslednja naloga.
       $("tn").value = ""; $("tz").value = ""; osnutek.tn = osnutek.tz = "";
-      addDoc(zbirka(m.id, "naloge"), { besedilo, strosek, za, dodal: jaz, ob: Date.now(), ...oznaciNarejeno(opravljeno) })
+      addDoc(zbirka(m.id, "naloge"), { besedilo, strosek, za, ...(rok ? { rok } : {}), dodal: jaz, ob: Date.now(), ...oznaciNarejeno(opravljeno) })
         .then(() => toast(opravljeno ? "Vpisano, drugi ga vidijo za pregled" : za ? `Naloga je za: ${imeClana(za)}` : "Naloga je za vse")).catch(napaka);
     };
     // Opravljeno delo je tvoje; za novo nalogo na koncu vprašamo, kdo jo mora narediti.
@@ -1051,9 +1095,10 @@ function renderNaloge(el, m) {
 function komuNaloga(besedilo, izberi) {
   openSheet(`<h3>Komu je ta naloga?</h3>
     <p class="muted sel">${esc(besedilo.length > 120 ? besedilo.slice(0, 120) + " …" : besedilo)}</p>
+    <label for="kr">Do kdaj (ni obvezno)</label><input id="kr" type="date">
     <div class="komu">${claniEkipe().map((e) => `<button class="komu-o" data-za="${esc(e)}" style="--c:${barvaClana(e)}"><span class="pika-oseba"></span>${esc(imeClana(e))}${e === jaz ? ` <small>(jaz)</small>` : ""}</button>`).join("")}
     <button class="komu-o" data-za="" style="--c:#98a2b3"><span class="pika-oseba"></span>Vsem</button></div>`, (box) => {
-    box.querySelectorAll("[data-za]").forEach((b) => (b.onclick = () => { closeSheet(); izberi(b.dataset.za); }));
+    box.querySelectorAll("[data-za]").forEach((b) => (b.onclick = () => { const rok = $("kr").value; closeSheet(); izberi(b.dataset.za, rok); }));
   });
 }
 
@@ -1062,6 +1107,7 @@ function urediNalogo(m, n) {
   openSheet(`<h3>Naloga</h3>
     <textarea id="te" maxlength="2000" style="min-height:110px">${esc(n.besedilo)}</textarea>
     <label>Za koga</label>${izbiraZa("teza", n.za || "")}
+    <label for="ter">Do kdaj</label><input id="ter" type="date" value="${esc(n.rok || "")}">
     <label for="tez">Strošek €</label><input id="tez" inputmode="decimal" value="${n.strosek ? esc(String(n.strosek).replace(".", ",")) : ""}" placeholder="0,00">
     ${n.narejeno ? `<label for="tep">Kaj je bilo narejeno (za pregled)</label><textarea id="tep" maxlength="2000" placeholder="Povezava, kje je, kaj naj pogledajo ...">${esc(n.porocilo || "")}</textarea>` : ""}
     <p class="small muted">Vpisano: ${esc(imeClana(n.dodal))} · ${esc(kdajBesedilo(n.ob))}</p>
@@ -1070,7 +1116,7 @@ function urediNalogo(m, n) {
     $("tes").onclick = () => {
       const besedilo = $("te").value.trim();
       if (!besedilo) return toast("Naloga je prazna.");
-      updateDoc(dok(m.id, "naloge", n.id), { besedilo, strosek: znesek($("tez").value), za: izbranZa("teza"), ...($("tep") ? { porocilo: $("tep").value.trim() } : {}), uredil: jaz }).catch(napaka); closeSheet();
+      updateDoc(dok(m.id, "naloge", n.id), { besedilo, strosek: znesek($("tez").value), za: izbranZa("teza"), rok: $("ter").value || null, ...($("tep") ? { porocilo: $("tep").value.trim() } : {}), uredil: jaz }).catch(napaka); closeSheet();
     };
     $("teb").onclick = () => {
       if (!confirm("Izbrišem nalogo?")) return;

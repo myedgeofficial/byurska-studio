@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { drevo, pozdrav, ZACETNE_MAPE, dan, opomnikiZa, opisOpomnikov, platformeIme, vrstaDatoteke, velikost } from "../src/data.js";
+import { drevo, pozdrav, ZACETNE_MAPE, dan, opomnikiZa, opisOpomnikov, platformeIme, vrstaDatoteke, velikost, rokNaloge } from "../src/data.js";
 
 test("drevo kot na skici", () => {
   const d = drevo(ZACETNE_MAPE);
@@ -159,4 +159,14 @@ test("ikone map in skupina TO DO", async () => {
   assert.equal(todoOseba("ToDo Nives"), "Nives");
   assert.equal(todoOseba("TO DOmov"), "");
   assert.equal(todoOseba("Maili"), "");
+});
+
+test("rok naloge", () => {
+  const zdaj = new Date(2026, 9, 25, 21, 0).getTime();
+  assert.equal(rokNaloge("", zdaj), null);
+  assert.deepEqual([rokNaloge("2026-10-25", zdaj).besedilo, rokNaloge("2026-10-25", zdaj).nujnost], ["do danes", "danes"]);
+  assert.deepEqual([rokNaloge("2026-10-26", zdaj).besedilo, rokNaloge("2026-10-26", zdaj).nujnost], ["do jutri", "kmalu"]);
+  assert.deepEqual([rokNaloge("2026-10-24", zdaj).besedilo, rokNaloge("2026-10-24", zdaj).nujnost], ["rok je bil včeraj", "zamuda"]);
+  assert.equal(rokNaloge("2026-10-30", zdaj).besedilo, "do pet 30. 10.");
+  assert.equal(rokNaloge("2026-10-30", zdaj).nujnost, "");
 });
