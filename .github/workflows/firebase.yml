@@ -35,6 +35,7 @@ jobs:
           APNS_KEY_P8: ${{ secrets.APNS_KEY_P8 }}
           APNS_KEY_ID: ${{ secrets.APNS_KEY_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TREZOR_VAPID_PRIVATE: ${{ secrets.TREZOR_VAPID_PRIVATE }}
         run: |
           printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
@@ -89,6 +90,8 @@ jobs:
             cp ../web/src/data.js functions/data.js
             B64=$(python3 -c "import os,re,textwrap; r=os.environ['APNS_KEY_P8'].replace('\\\\n','\\n'); b=re.sub(r'-----(BEGIN|END)[A-Z ]*-----','',r); b=re.sub(r'[^A-Za-z0-9+/=]','',b); import base64; print(base64.b64encode(('-----BEGIN PRIVATE KEY-----\\n'+'\\n'.join(textwrap.wrap(b,64))+'\\n-----END PRIVATE KEY-----\\n').encode()).decode())")
             printf 'APNS_KEY_ID=%s\nAPNS_TEAM_ID=%s\nAPNS_KEY_B64=%s\n' "$APNS_KEY_ID" "$APPLE_TEAM_ID" "$B64" > functions/.env
+            # REMAKO banka: spletna push obvestila (javni ključ je tudi v remako-trezor src/app.js).
+            printf 'TREZOR_VAPID_PUBLIC=%s\nTREZOR_VAPID_PRIVATE=%s\n' "BNNvQZuiAM77f4p14Izu8HtBjbfuO27YLeVEAWSnWdG2AinF9zC1DlJXTjcLF53zQeS5odzXtu3EAjci2pOMgLc" "$TREZOR_VAPID_PRIVATE" >> functions/.env
             (cd functions && npm install --no-audit --no-fund --silent)
             # Prva objava funkcije 2. generacije včasih pade, dokler Google ne pripravi storitev: poskusimo še enkrat.
             $FB deploy --only functions --force || { sleep 90; $FB deploy --only functions --force; }

@@ -14,7 +14,7 @@ service cloud.firestore {
     }
     // Vse skupno vidijo vsi člani, razen osebnih map (zasebno/{e-pošta}/...) in REMAKO trezorja.
     match /{document=**} {
-      allow read, write: if clan() && !(request.path[3] in ['zasebno', 'trezor', 'trezor-stanje']);
+      allow read, write: if clan() && !(request.path[3] in ['zasebno', 'trezor', 'trezor-stanje', 'trezor-naprave', 'trezor-obvestila']);
     }
     // Naloge vseh map naenkrat (domači zaslon »Moje naloge«).
     match /{pot=**}/naloge/{id} {
@@ -54,6 +54,30 @@ service cloud.firestore {
     match /trezor-stanje/obstaja {
       allow get: if bankir();
       allow create, update: if bankir() && request.resource.data.keys().hasOnly(['obstaja']) && request.resource.data.obstaja == true;
+    }
+    // REMAKO banka, push obvestila za naloge. Brskalnik nič ne bere; pošilja funkcija (functions/trezor.js).
+    // Naprava: naročnina brskalnika, vedno pod e-pošto prijavljenega. Ime = SHA-256 naslova naročnine.
+    match /trezor-naprave/{id} {
+      allow delete: if bankir() && id.matches('^[0-9a-f]{64}$');
+      allow create, update: if bankir() && id.matches('^[0-9a-f]{64}$')
+        && request.resource.data.keys().hasOnly(['email', 'sub', 'naprava', 't'])
+        && request.resource.data.email == email()
+        && request.resource.data.sub is map && request.resource.data.sub.endpoint is string
+        && request.resource.data.sub.endpoint.matches('^https://.{10,1000}$')
+        && request.resource.data.t == request.time;
+    }
+    // Obvestilo: samo kdo, komu, vrsta in čas (vsebina naloge ostane šifrirana v trezorju).
+    match /trezor-obvestila/{id} {
+      function bankirja() { return ['teo.simonic7@gmail.com', 'tim.petrovic@gmail.com']; }
+      allow delete: if bankir();
+      allow create, update: if bankir() && id.matches('^[0-9a-f-]{36}-(nova|opomnik|opravljeno|test)$')
+        && request.resource.data.keys().hasOnly(['komu', 'od', 'vrsta', 'kdaj']) && request.resource.data.keys().hasAll(['komu', 'od', 'vrsta', 'kdaj'])
+        && request.resource.data.od == email()
+        && request.resource.data.komu in bankirja()
+        && request.resource.data.vrsta in ['nova', 'opomnik', 'opravljeno', 'test']
+        && id.matches('.*-' + request.resource.data.vrsta)
+        && (request.resource.data.vrsta != 'test' || request.resource.data.komu == email())
+        && request.resource.data.kdaj is timestamp;
     }
   }
 }

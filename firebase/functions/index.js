@@ -95,3 +95,6 @@ export const novaNaloga = onDocumentWritten({ document: "mape/{mapa}/naloge/{id}
   await Promise.all(mrtvi.map((t) => db.doc(`naprave/${t}`).delete()));
   console.log(`Naloga ${e.params.id}: poslanih obvestil ${ok}.`);
 });
+
+// REMAKO banka: push obvestila za naloge (trezor.js).
+export { trezorObvestilo, trezorOpomniki } from "./trezor.js";
