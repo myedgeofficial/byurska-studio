@@ -604,3 +604,26 @@ main.igra-mode { max-width: 1500px; }
 .qr-ovoj { display: grid; justify-items: center; gap: 8px; }
 .qr-2fa { width: 220px; height: 220px; border-radius: 14px; background: #fff; padding: 8px; }
 .kljuc-2fa { word-break: break-all; font-size: 15px; padding: 8px 12px; border-radius: 10px; background: var(--field); user-select: all; }
+
+/* ---------- Preprost pregled (Na kratko) ---------- */
+.pp-vrh { display: grid; grid-template-columns: 1.6fr repeat(3, 1fr); gap: 14px; margin-bottom: 14px; }
+.pp-obdobja { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 14px; }
+.pp, .pp-glavno { display: grid; align-content: start; gap: 6px; padding: 20px; border-radius: var(--r); background: var(--glass); border: 1px solid var(--line); }
+.pp span, .pp-glavno span { font-size: 15px; font-weight: 700; color: var(--muted); }
+.pp b { font-size: 30px; font-weight: 850; letter-spacing: -.01em; line-height: 1.1; }
+.pp small, .pp-glavno small { font-size: 14.5px; color: var(--dim); font-weight: 600; }
+.pp-glavno { background: linear-gradient(135deg, rgba(124,58,237,.22), rgba(236,72,153,.1)); border-color: var(--line2); }
+.pp-glavno b { font-size: 46px; font-weight: 900; letter-spacing: -.02em; line-height: 1.05; }
+.pp b.pos, .pp-glavno b.pos { color: var(--good); } .pp b.neg, .pp-glavno b.neg { color: var(--err); }
+.pp-graf { margin-bottom: 14px; }
+.pp-tbl { width: 100%; font-size: 16.5px; }
+.pp-tbl th { text-align: left; color: var(--dim); font-weight: 700; padding: 6px 4px; }
+.pp-tbl td { padding: 9px 4px; border-top: 1px solid var(--line); font-weight: 650; }
+.pp-tbl td:not(:first-child), .pp-tbl th:not(:first-child) { text-align: right; }
+.pp-nasveti { margin: 0 0 10px; padding: 0; list-style: none; display: grid; gap: 10px; }
+.pp-nasveti li { padding: 12px 14px; border-radius: 14px; font-size: 16px; font-weight: 600; line-height: 1.4; background: var(--field); border-left: 4px solid var(--line2); }
+.pp-nasveti li.pos { border-left-color: var(--good); } .pp-nasveti li.neg { border-left-color: var(--err); }
+@media (max-width: 900px) { .pp-vrh { grid-template-columns: 1fr 1fr; } .pp-glavno { grid-column: 1 / -1; } }
+@media (max-width: 520px) { .pp-obdobja { grid-template-columns: 1fr 1fr 1fr; gap: 8px; } .pp-obdobja .pp { padding: 14px 12px; } .pp-obdobja .pp b { font-size: 20px; } .pp b { font-size: 24px; } .pp-glavno b { font-size: 38px; } }
+.pp-vrh.k1 { grid-template-columns: 1.6fr 1fr; } .pp-vrh.k2 { grid-template-columns: 1.6fr 1fr 1fr; }
+@media (max-width: 900px) { .pp-vrh.k1, .pp-vrh.k2 { grid-template-columns: 1fr 1fr; } }
