@@ -61,6 +61,14 @@ export function dan(ms, zdaj = Date.now()) {
   if (razlika === -1) return "včeraj";
   return `${DNEVI[d.getDay()]} ${d.getDate()}. ${d.getMonth() + 1}.`;
 }
+// Rok naloge »LLLL-MM-DD«: besedilo (»do jutri«, »rok je bil včeraj«) in nujnost (zamuda, danes, kmalu = v 2 dneh).
+export function rokNaloge(rok, zdaj = Date.now()) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(rok || ""));
+  if (!m) return null;
+  const d = new Date(+m[1], +m[2] - 1, +m[3]);
+  const razlika = Math.round((polnoc(d) - polnoc(new Date(zdaj))) / 864e5);
+  return { besedilo: razlika < 0 ? `rok je bil ${dan(d.getTime(), zdaj)}` : `do ${dan(d.getTime(), zdaj)}`, nujnost: razlika < 0 ? "zamuda" : razlika === 0 ? "danes" : razlika <= 2 ? "kmalu" : "", ms: d.getTime() };
+}
 // Kako nujna je objava: 1 dan prej, na dan in z zamudo »rdeca«, 2 dni prej »oranzna«, dokler ni označena kot objavljena.
 export function nujnost(o, zdaj = Date.now()) {
   if (!o || o.objavljeno || !o.kdaj) return "";
