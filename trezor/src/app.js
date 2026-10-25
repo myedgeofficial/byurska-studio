@@ -50,7 +50,7 @@ let podatki = null; // { vnosi: [...] }
 let posodobljeno = null;
 let odjava = null;
 let filter = { kat: "vse", isci: "" };
-let pogled = location.hash === "#remako" ? "remako" : "banka"; // "statistika", "remako" (ločena podstran #remako)
+let pogled = location.hash === "#remako" ? "remako" : "trezor"; // "statistika", "remako" (ločena podstran #remako)
 let statFilter = { racun: "moji", obdobje: "vse", algo: "vsi", vrsta: "zivo" };
 let statOddelek = "pregled", remakoOddelek = "pregled";
 const simPravila = { maxNaDan: 0, stopPoIzgubah: 0, brezSeje: "", samoKz: false };
@@ -392,19 +392,23 @@ const ujema = (v, q) =>
 
 function zavihki() {
   return h("div", { class: "tabs" },
-    h("button", { class: pogled === "banka" ? "on" : "", onclick: () => ((pogled = "banka"), seznam()) }, ikona("podjetje"), "Banka"),
     h("button", { class: pogled === "trezor" ? "on" : "", onclick: () => ((pogled = "trezor"), seznam()) }, ikona("scit"), "Trezor"),
-    h("button", { class: pogled === "statistika" ? "on" : "", onclick: () => ((pogled = "statistika"), seznam()) }, ikona("trend"), "Statistika"));
+    h("button", { class: pogled === "statistika" ? "on" : "", onclick: () => ((pogled = "statistika"), seznam()) }, ikona("trend"), "Statistika"),
+    h("button", { class: pogled === "remako" ? "on" : "", onclick: () => ((pogled = "remako"), seznam()) }, ikona("podjetje"), "REMAKO"));
 }
 
+// Gumb »Prikaz«: preklop med navadnim pogledom in 3D banko.
+const prikaz = () => h("button", { class: "pill prikaz" + (pogled === "banka" ? " on" : ""), title: "Preklopi med navadnim pogledom in 3D banko",
+  onclick: () => { izBanke = false; pogled = pogled === "banka" ? "trezor" : "banka"; seznam(); window.scrollTo(0, 0); } }, ikona("podjetje"), pogled === "banka" ? "Navaden pogled" : "Prikaz");
 const glavaOdprta = () =>
   glava(
+    prikaz(),
     h("button", { class: "pill", title: "Koda in varnostna kopija", "aria-label": "Nastavitve", onclick: nastavitve }, ikona("nastavitve"), h("span", { class: "hide-xs" }, "Koda in kopija")),
     h("button", { class: "iconbtn", title: "Zakleni", "aria-label": "Zakleni", onclick: () => zakleni_() }, ikona("kljucavnica"))
   );
 
 function seznam() {
-  if (pogled === "banka") return bankaZaslon();
+  if (pogled === "banka") return igraZaslon();
   if (pogled === "statistika") return statistikaZaslon();
   if (pogled === "remako") return remakoZaslon();
   const vnosi = [...podatki.vnosi].sort((a, b) =>
@@ -463,7 +467,7 @@ async function igraZaslon() {
     [trejdi, modul] = await Promise.all([uvozi.length ? naloziTrejde().then((a) => a.filter((t) => t.v === "zivo")) : [], import("./igra.js")]);
   } catch (e) { console.error(e); }
   if (pogled !== "banka" || !ovoj.isConnected) return;
-  if (!modul) { bankaBrez3D = true; return bankaZaslon(); }
+  if (!modul) { pogled = "trezor"; seznam(); return obvestilo("3D prikaz se na tej napravi ni naložil."); }
   const kdoZa = new Map(uvozi.map((u) => [u.racun, trgovalec(u)]));
   const zaOsebo = (k) => trejdi.filter((t) => (kdoZa.get(t.r) || "Drugi") === k);
   const vsota = (a) => Math.round(a.reduce((x, t) => x + t.p, 0) * 100) / 100;
@@ -526,12 +530,12 @@ async function igraZaslon() {
       igralec: jaz, partner: jaz === "Tim" ? "Teo" : "Tim",
       nivo: { ...nv, opis: nv.doo != null ? `${znak(skupaj)} · še ${evri(nv.doo - Math.max(0, skupaj))} do nivoja ${nv.n + 1}` : `${znak(skupaj)} · največji nivo` },
       oddelki, nadstropja, trak,
-      klasicno: () => { shraniPogled("klasicno"); seznam(); },
+      klasicno: () => { pogled = "trezor"; seznam(); },
     });
   } catch (e) {
     console.error(e);
-    bankaBrez3D = true;
-    bankaZaslon();
+    pogled = "trezor"; seznam();
+    obvestilo("Ta naprava ne podpira 3D prikaza.");
   }
 }
 
@@ -1023,7 +1027,7 @@ async function remakoZaslon() {
       h("div", { class: "dash-logo" }, h("span", { class: "mark" }, "R"), h("div", {}, h("b", {}, "REMAKO"), h("small", {}, "Trading desk"))),
       h("nav", { class: "dash-nav" }, ODDELKI.map(([k, ime, ik]) => h("button", { class: remakoOddelek === k ? "on" : "", onclick: () => ((remakoOddelek = k), seznam()) }, ikona(ik), h("span", {}, ime)))),
       h("div", { class: "dash-dno" },
-        h("button", { class: "dash-nazaj", onclick: () => ((pogled = "banka"), seznam()) }, ikona("podjetje"), h("span", {}, "Banka")),
+        h("button", { class: "dash-nazaj", onclick: () => ((pogled = "banka"), seznam()) }, ikona("podjetje"), h("span", {}, "Prikaz · 3D banka")),
         h("button", { class: "dash-nazaj", onclick: () => ((pogled = "statistika"), seznam()) }, ikona("trend"), h("span", {}, "Osebna statistika")),
         h("button", { class: "dash-nazaj", onclick: () => ((pogled = "trezor"), seznam()) }, ikona("scit"), h("span", {}, "Trezor")),
         h("button", { class: "dash-nazaj", onclick: () => zakleni_() }, ikona("kljucavnica"), h("span", {}, "Zakleni")))),

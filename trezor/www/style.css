@@ -598,3 +598,5 @@ main.igra-mode { max-width: 1500px; }
 .igra-soba .igra-vstop { background: #15161b; color: #fff; }
 .igra-dvigalo .igra-soba-glava { margin-bottom: 4px; }
 .igra-dvigalo .igra-x { background: rgba(255,255,255,.08); }
+.pill.prikaz { background: var(--grad); border-color: transparent; color: #fff; font-weight: 800; box-shadow: 0 8px 24px -10px rgba(236,72,153,.7); }
+.pill.prikaz.on { background: rgba(255,255,255,.08); border-color: var(--line2); box-shadow: none; }

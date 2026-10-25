@@ -368,7 +368,7 @@ export function zazeni(ovoj, { igralec, partner, nivo, oddelki, nadstropja, trak
   const gumb = (cls, besedilo, klik) => { const b = el("button", cls, besedilo); b.type = "button"; b.addEventListener("click", klik); return b; };
   const hud = div("igra-hud");
   const nX = div("igra-xp", div("")); nX.firstChild.style.width = Math.round(nivo.napredek * 100) + "%";
-  hud.append(div("igra-nivo", el("b", "", `Nivo ${nivo.n}`), el("span", "", nivo.opis), nX), gumb("igra-gumb", "Klasičen pogled", klasicno));
+  hud.append(div("igra-nivo", el("b", "", `Nivo ${nivo.n}`), el("span", "", nivo.opis), nX));
   const pomoc = el("div", "igra-pomoc", naDotik ? "Joystick levo za hojo · povleci za pogled" : "WASD ali puščice za hojo · Shift tek · povleci z miško za pogled · E za vstop");
   const poziv = div("igra-poziv");
   const pozivIme = el("b");
