@@ -600,3 +600,7 @@ main.igra-mode { max-width: 1500px; }
 .igra-dvigalo .igra-x { background: rgba(255,255,255,.08); }
 .pill.prikaz { background: var(--grad); border-color: transparent; color: #fff; font-weight: 800; box-shadow: 0 8px 24px -10px rgba(236,72,153,.7); }
 .pill.prikaz.on { background: rgba(255,255,255,.08); border-color: var(--line2); box-shadow: none; }
+.koda-2fa { font: 800 32px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .4em; text-align: center; }
+.qr-ovoj { display: grid; justify-items: center; gap: 8px; }
+.qr-2fa { width: 220px; height: 220px; border-radius: 14px; background: #fff; padding: 8px; }
+.kljuc-2fa { word-break: break-all; font-size: 15px; padding: 8px 12px; border-radius: 10px; background: var(--field); user-select: all; }

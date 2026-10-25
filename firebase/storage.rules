@@ -17,7 +17,8 @@ service firebase.storage {
     // seznam ni dovoljen, vsebina je šifrirana v brskalniku.
     function bankir() {
       return request.auth != null && request.auth.token.email_verified == true
-        && request.auth.token.email.lower() in ['teo.simonic7@gmail.com', 'tim.petrovic@gmail.com'];
+        && request.auth.token.email.lower() in ['teo.simonic7@gmail.com', 'tim.petrovic@gmail.com']
+        && request.auth.token.firebase.sign_in_second_factor == 'totp';
     }
     match /trezor/{tid}/{fid} {
       allow get, delete: if bankir() && tid.matches('^[0-9a-f]{64}$');

@@ -98,6 +98,10 @@ jobs:
             curl -s -o /dev/null -w "Posodobitev domen za prijavo: HTTP %{http_code}\n" -X PATCH -H "Authorization: Bearer $TOK" -H "x-goog-user-project: $P" -H "Content-Type: application/json" \
               -d @"$RUNNER_TEMP/auth-novo.json" "$IDT?updateMask=authorizedDomains" || true
           fi
+          # Koda 2FA (TOTP, Google Authenticator): vklopimo na projektu (potrebna je nadgradnja na Identity Platform).
+          curl -s -o "$RUNNER_TEMP/mfa.json" -w "Vklop TOTP 2FA: HTTP %{http_code}\n" -X PATCH -H "Authorization: Bearer $TOK" -H "x-goog-user-project: $P" -H "Content-Type: application/json" \
+            -d '{"mfa":{"providerConfigs":[{"state":"ENABLED","totpProviderConfig":{"adjacentIntervals":5}}]}}' "$IDT?updateMask=mfa.providerConfigs" || true
+          python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print("2FA:", json.dumps(d.get("mfa") or d.get("error"))[:400])' "$RUNNER_TEMP/mfa.json" || true
           rm -f "$RUNNER_TEMP/sa.json"
 
           # Preveri, da spletni ključ deluje z novega naslova (ključ je lahko omejen na znane strani).

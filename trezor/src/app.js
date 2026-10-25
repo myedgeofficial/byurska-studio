@@ -4,7 +4,9 @@
 import { initializeApp } from "firebase/app";
 import { initializeFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, onSnapshot, runTransaction, serverTimestamp } from "firebase/firestore";
 import { getStorage, connectStorageEmulator, ref as sref, uploadBytes, getBytes, deleteObject } from "firebase/storage";
-import { getAuth, connectAuthEmulator, GoogleAuthProvider, signInWithPopup, signInWithCredential, onAuthStateChanged, signOut } from "firebase/auth";
+import { getAuth, connectAuthEmulator, GoogleAuthProvider, signInWithPopup, signInWithCredential, onAuthStateChanged, signOut,
+  setPersistence, browserSessionPersistence, multiFactor, getMultiFactorResolver, TotpMultiFactorGenerator } from "firebase/auth";
+import { toDataURL as qrSlika } from "qrcode";
 import { read as beriTabelo, utils as tabelaUtils } from "xlsx";
 import { najdiTabelo, vTrejde, ugani, statistika as izracunaj, kljucTrejda, DNEVI, MESECI } from "./trejdi.js";
 import { krivulja, stolpci, toplota, vecKrivulj, nalozeniStolpci, krof, koledar, obroc, merilnik, iskrica, trak } from "./grafi.js";
@@ -18,6 +20,8 @@ const fbApp = initializeApp(FB_CONFIG);
 const db = initializeFirestore(fbApp, { ignoreUndefinedProperties: true });
 const shramba = getStorage(fbApp);
 const avt = getAuth(fbApp);
+// Prijava velja samo, dokler je zavihek odprt: ob vsakem novem obisku znova Google + koda 2FA.
+setPersistence(avt, browserSessionPersistence).catch(() => {});
 if (location.hostname === "localhost") {
   // samo za preizkus
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
@@ -141,6 +145,7 @@ function prijava(sporocilo) {
       ponudnik.setCustomParameters({ prompt: "select_account" });
       await signInWithPopup(avt, ponudnik);
     } catch (e) {
+      if (e.code === "auth/multi-factor-auth-required") return koda2FA(getMultiFactorResolver(avt, e));
       console.error(e);
       gumb.disabled = false;
       zamenjaj(napaka, e.code === "auth/popup-closed-by-user" ? "" : "Prijava ni uspela. Poskusi znova.");
@@ -150,9 +155,63 @@ function prijava(sporocilo) {
   zaslon(glava(), h("div", { class: "card narrow glass login" },
     h("div", { class: "seal" }, h("div", { class: "seal-ring" }), ikona("scit")),
     h("h1", {}, "REMAKO banka"),
-    h("p", { class: "muted" }, "Dostop imata samo Teo in Tim. Najprej Google prijava (z 2FA na telefonu), nato koda trezorja."),
+    h("p", { class: "muted" }, "Dostop imata samo Teo in Tim: Google prijava, koda 2FA iz aplikacije Authenticator in koda trezorja."),
     napaka, gumb,
-    h("p", { class: "fine" }, "Na tej napravi se Google prijava zapomni, koda trezorja pa se vpiše ob vsakem odprtju.")));
+    h("p", { class: "fine" }, "Ko zapreš zavihek, se odjaviš. Ob naslednjem obisku znova Google in koda 2FA.")));
+}
+
+// Vnos 6-mestne kode (Authenticator) za prijavo. Preveri jo Googlov strežnik.
+function vnosKode(naslov, opis, potrdi, dodatno) {
+  const vnos = h("input", { type: "text", inputmode: "numeric", autocomplete: "one-time-code", maxlength: 6, placeholder: "000000", class: "koda-2fa", autofocus: true });
+  const napaka = h("p", { class: "err" });
+  const gumb = h("button", { class: "btn", type: "submit" }, "Potrdi");
+  const obrazec = h("form", { class: "card narrow glass login", onsubmit: async (e) => {
+    e.preventDefault();
+    const koda = vnos.value.replace(/\D/g, "");
+    if (koda.length !== 6) return zamenjaj(napaka, "Vpiši 6 številk iz aplikacije.");
+    gumb.disabled = true; zamenjaj(napaka);
+    try { await potrdi(koda); }
+    catch (err) {
+      console.error(err);
+      gumb.disabled = false; vnos.value = ""; vnos.focus();
+      zamenjaj(napaka, err.code === "auth/invalid-verification-code" ? "Napačna koda. Počakaj na novo in poskusi znova." : err.code === "auth/requires-recent-login" ? "Seja je potekla, prijavi se znova." : "Ni uspelo. Poskusi znova.");
+      if (err.code === "auth/requires-recent-login") setTimeout(() => signOut(avt), 1500);
+    }
+  } },
+    h("div", { class: "seal" }, h("div", { class: "seal-ring" }), ikona("kljucavnica")),
+    h("h1", {}, naslov), h("p", { class: "muted" }, opis), dodatno, vnos, napaka, gumb,
+    h("button", { class: "linkbtn", type: "button", onclick: () => signOut(avt) }, "Prekliči in se odjavi"));
+  zaslon(glava(), obrazec);
+  vnos.focus();
+}
+
+function koda2FA(resolver) {
+  const namig = resolver.hints.find((x) => x.factorId === TotpMultiFactorGenerator.FACTOR_ID) || resolver.hints[0];
+  vnosKode("Koda 2FA", "Odpri Google Authenticator in vpiši 6-mestno kodo za REMAKO banko.",
+    (koda) => resolver.resolveSignIn(TotpMultiFactorGenerator.assertionForSignIn(namig.uid, koda)));
+}
+
+// Prva prijava: nastavitev aplikacije Authenticator (QR koda), potem je koda obvezna ob vsaki prijavi.
+async function nastavi2FA(u) {
+  zaslon(glava(), h("div", { class: "card narrow glass login" }, h("div", { class: "spin" })));
+  let skrivnost;
+  try { skrivnost = await TotpMultiFactorGenerator.generateSecret(await multiFactor(u).getSession()); }
+  catch (e) {
+    console.error(e);
+    if (e.code === "auth/requires-recent-login") { await signOut(avt); return prijava("Za nastavitev 2FA se prijavi znova."); }
+    return zaslon(glava(), h("div", { class: "card narrow glass login" }, h("h1", {}, "2FA še ni vklopljena"),
+      h("p", { class: "muted" }, "Na strežniku še ni vklopljena prijava s kodo. Poskusi čez nekaj minut."),
+      h("button", { class: "btn", type: "button", onclick: () => signOut(avt) }, "Odjava")));
+  }
+  const url = skrivnost.generateQrCodeUrl(u.email, "REMAKO banka");
+  const slika = h("img", { class: "qr-2fa", alt: "QR koda za Authenticator", src: await qrSlika(url, { margin: 1, width: 240 }) });
+  vnosKode("Vklopi 2FA", "Enkrat: v aplikaciji Google Authenticator tapni + in skeniraj QR kodo. Nato vpiši 6-mestno kodo, ki jo pokaže.",
+    async (koda) => {
+      await multiFactor(u).enroll(TotpMultiFactorGenerator.assertionForEnrollment(skrivnost, koda), "Authenticator");
+      obvestilo("2FA je vklopljena. Prijavi se še enkrat s kodo.");
+      await signOut(avt);
+    },
+    h("div", { class: "qr-ovoj" }, slika, h("p", { class: "fine" }, "Ne moreš skenirati? Vpiši ključ ročno:"), h("code", { class: "mono kljuc-2fa" }, skrivnost.secretKey)));
 }
 
 function brezDostopa(u) {
@@ -1598,10 +1657,17 @@ function varnostnaKopija() {
 }
 
 let zadnjiUporabnik;
-onAuthStateChanged(avt, (u) => {
+onAuthStateChanged(avt, async (u) => {
   const prej = zadnjiUporabnik;
   zadnjiUporabnik = u ? u.uid : null;
   if (!u) { if (trezor) zakleni_(); return prijava(); }
   if (!dovoljen(u)) return brezDostopa(u);
+  // Brez drugega koraka (koda 2FA) ni dostopa: baza to preveri tudi sama.
+  const zeton = await u.getIdTokenResult();
+  if (zeton.signInSecondFactor !== "totp" && location.hostname !== "localhost") {
+    if (!multiFactor(u).enrolledFactors.length) return nastavi2FA(u);
+    await signOut(avt);
+    return prijava("Prijavi se znova, tokrat še s kodo 2FA.");
+  }
   if (!trezor && prej !== u.uid) zaklenjeno();
 });
