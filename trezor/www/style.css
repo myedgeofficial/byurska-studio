@@ -627,3 +627,5 @@ main.igra-mode { max-width: 1500px; }
 @media (max-width: 520px) { .pp-obdobja { grid-template-columns: 1fr 1fr 1fr; gap: 8px; } .pp-obdobja .pp { padding: 14px 12px; } .pp-obdobja .pp b { font-size: 20px; } .pp b { font-size: 24px; } .pp-glavno b { font-size: 38px; } }
 .pp-vrh.k1 { grid-template-columns: 1.6fr 1fr; } .pp-vrh.k2 { grid-template-columns: 1.6fr 1fr 1fr; }
 @media (max-width: 900px) { .pp-vrh.k1, .pp-vrh.k2 { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 900px) { .pp-vrh > :last-child:nth-child(even) { grid-column: 1 / -1; } }
+@media (max-width: 520px) { .pill.prikaz { width: auto; padding: 0 14px; } .pill.prikaz .ik { display: none; } }
