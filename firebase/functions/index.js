@@ -98,3 +98,5 @@ export const novaNaloga = onDocumentWritten({ document: "mape/{mapa}/naloge/{id}
 
 // REMAKO banka: push obvestila za naloge (trezor.js).
 export { trezorObvestilo, trezorOpomniki } from "./trezor.js";
+// REMAKO banka: Algo Lab, dogodki iz MT5 (algo.js). Samo nadzor, brez naročil.
+export { algo, algoPreizkus } from "./algo.js";

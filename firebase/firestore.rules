@@ -14,7 +14,8 @@ service cloud.firestore {
     }
     // Vse skupno vidijo vsi člani, razen osebnih map (zasebno/{e-pošta}/...) in REMAKO trezorja.
     match /{document=**} {
-      allow read, write: if clan() && !(request.path[3] in ['zasebno', 'trezor', 'trezor-stanje', 'trezor-naprave', 'trezor-obvestila']);
+      allow read, write: if clan() && !(request.path[3] in ['zasebno', 'trezor', 'trezor-stanje', 'trezor-naprave', 'trezor-obvestila'])
+        && !request.path[3].matches('^algo-.*');
     }
     // Naloge vseh map naenkrat (domači zaslon »Moje naloge«).
     match /{pot=**}/naloge/{id} {
@@ -78,6 +79,21 @@ service cloud.firestore {
         && id.matches('.*-' + request.resource.data.vrsta)
         && (request.resource.data.vrsta != 'test' || request.resource.data.komu == email())
         && request.resource.data.kdaj is timestamp;
+    }
+    // REMAKO Algo Lab: dogodki iz MT5 (functions/algo.js). Piše samo funkcija (Admin SDK), bereta samo Teo in Tim s 2FA.
+    // algo-* so izključene iz skupnega pravila zgoraj, zato jih člani Studia ne vidijo.
+    match /{zbirka}/{id} {
+      allow read: if bankir() && zbirka in ['algo-dogodki', 'algo-boti', 'algo-verzije', 'algo-povzetek',
+        'algo-test-dogodki', 'algo-test-boti', 'algo-test-verzije', 'algo-test-povzetek'];
+    }
+    // Opomba k verziji strategije (samo besedilo za ljudi; nič ne spremeni v MT5).
+    match /algo-opombe/{id} {
+      allow read: if bankir();
+      allow delete: if bankir() && id.matches('^[A-Za-z0-9_-]{1,200}$');
+      allow create, update: if bankir() && id.matches('^[A-Za-z0-9_-]{1,200}$')
+        && request.resource.data.keys().hasOnly(['besedilo', 'avtor', 't']) && request.resource.data.keys().hasAll(['besedilo', 'avtor', 't'])
+        && request.resource.data.besedilo is string && request.resource.data.besedilo.size() <= 4000
+        && request.resource.data.avtor == email() && request.resource.data.t == request.time;
     }
   }
 }

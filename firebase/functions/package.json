@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "main": "index.js",
+  "scripts": {
+    "test": "node --test test/algo.test.js"
+  },
   "engines": {
     "node": "22"
   },
