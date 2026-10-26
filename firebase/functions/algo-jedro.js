@@ -194,6 +194,10 @@ export function pozicije(posli) {
       p.trajanje_s = Math.round((p.zaprto_msc - p.odprto_msc) / 1000);
     } else if (p.volumen_izstop > 0) p.status = "delno_zaprta";
     p.odprt_volumen = r6(Math.max(odprto, 0));
+    // Za analizo: razlog zadnjega izstopa (SL/TP/EA) in ura/dan vstopa po strežniškem času borze.
+    const izstopi = seznam.filter((e) => e.data.entry === "DEAL_ENTRY_OUT");
+    p.izhod_razlog = izstopi.length ? String(izstopi[izstopi.length - 1].data.reason || "").replace("DEAL_REASON_", "") || null : null;
+    if (p.odprto_msc != null) { const t = new Date(p.odprto_msc); p.ura = t.getUTCHours(); p.dan = (t.getUTCDay() + 6) % 7; }
     izid.push(p);
   }
   return izid.sort((a, b) => (b.zaprto_msc ?? b.odprto_msc ?? 0) - (a.zaprto_msc ?? a.odprto_msc ?? 0));

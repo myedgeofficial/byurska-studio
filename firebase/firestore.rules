@@ -83,7 +83,7 @@ service cloud.firestore {
     // REMAKO Algo Lab: dogodki iz MT5 (functions/algo.js). Piše samo funkcija (Admin SDK), bereta samo Teo in Tim s 2FA.
     // algo-* so izključene iz skupnega pravila zgoraj, zato jih člani Studia ne vidijo.
     match /{zbirka}/{id} {
-      allow read: if bankir() && zbirka in ['algo-dogodki', 'algo-boti', 'algo-verzije', 'algo-povzetek',
+      allow read: if bankir() && zbirka in ['algo-dogodki', 'algo-boti', 'algo-verzije', 'algo-povzetek', 'algo-porocila', 'algo-odlocitve',
         'algo-test-dogodki', 'algo-test-boti', 'algo-test-verzije', 'algo-test-povzetek'];
     }
     // Opomba k verziji strategije (samo besedilo za ljudi; nič ne spremeni v MT5).

@@ -12,6 +12,7 @@ const BESEDILO = {
   opomnik: () => ["Opomnik: naloga čaka", "Odpri REMAKO banko in poglej Naloge."],
   opravljeno: (od) => [`${od} je opravil nalogo`, "Odpri REMAKO banko in poglej Naloge."],
   test: () => ["Obvestila delujejo", "Tako boš dobil nove naloge in opomnike."],
+  algo: () => ["Poročilo algoritma je pripravljeno", "REMAKO banka → Algo Lab → Analiza."],
 };
 
 let vapid = false;
@@ -29,7 +30,7 @@ async function poslji(snap) {
   let ok = 0;
   await Promise.all(naprave.docs.map(async (n) => {
     try {
-      await webpush.sendNotification(n.data().sub, JSON.stringify({ naslov, besedilo, url: "./#naloge", tag: snap.id }), { TTL: 86400, urgency: "high" });
+      await webpush.sendNotification(n.data().sub, JSON.stringify({ naslov, besedilo, url: o.vrsta === "algo" ? "./#remako" : "./#naloge", tag: snap.id }), { TTL: 86400, urgency: "high" });
       ok++;
     } catch (e) {
       // Naprava se je odjavila ali naročnina ne velja več.

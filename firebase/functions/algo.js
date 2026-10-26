@@ -8,13 +8,16 @@
 //   GET  /health
 // Hosting remako-trezor preusmeri /v1/** in /health na to funkcijo (firebase.json v repozitoriju remako-trezor).
 import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import crypto from "node:crypto";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { NAJVEC_TELO, Neveljavno, Prepovedano, Konflikt, sha256, preberiPaket, odtis, preberiKljuce, avtoriziraj,
   csvPoslov, povzetek, casUtc, sinteticniPaket, kanonicno } from "./algo-jedro.js";
+import { analiza, dnevniPovzetek } from "./algo-analiza.js";
 
 const REGIJA = "europe-west1";
 const BANKIRJA = ["teo.simonic7@gmail.com", "tim.petrovic@gmail.com"];
-export const zbirke = (P) => ({ dogodki: `${P}-dogodki`, stevec: `${P}-stevec`, boti: `${P}-boti`, verzije: `${P}-verzije`, povzetek: `${P}-povzetek` });
+export const zbirke = (P) => ({ dogodki: `${P}-dogodki`, stevec: `${P}-stevec`, boti: `${P}-boti`, verzije: `${P}-verzije`, povzetek: `${P}-povzetek`, odlocitve: `${P}-odlocitve` });
 
 // Zapiše paket v eni transakciji: vse ali nič. Isti ID z isto vsebino = dvojnik; z drugačno = Konflikt (nič se ne zapiše).
 export async function zapisi(db, dogodki, P = "algo") {
@@ -26,18 +29,24 @@ export async function zapisi(db, dogodki, P = "algo") {
     const idji = [...new Set(dogodki.map((e) => e.event_id))];
     const boti = [...new Set(dogodki.map(botKljuc))];
     const verzije = [...new Set(dogodki.filter((e) => e.event_type !== "deal").map(verKljuc))];
+    // Dnevni števci signalov in zavrnitev (za analizo, tudi v SHADOW).
+    const odlKljuc = (e) => `${e.bot_id}__${e.environment}__${e.event_time_utc.slice(0, 10)}`;
+    const odlDni = [...new Set(dogodki.filter((e) => e.event_type === "decision" || e.event_type === "signal").map(odlKljuc))];
     const ref = {
       dog: idji.map((id) => db.collection(Z.dogodki).doc(sha256(id))),
       stevec: db.collection(Z.stevec).doc("seq"),
       boti: boti.map((b) => db.collection(Z.boti).doc(b)),
       ver: verzije.map((v) => db.collection(Z.verzije).doc(v)),
+      odl: odlDni.map((o) => db.collection(Z.odlocitve).doc(o)),
     };
-    const vse = await tx.getAll(...ref.dog, ref.stevec, ...ref.boti, ...ref.ver);
+    const vse = await tx.getAll(...ref.dog, ref.stevec, ...ref.boti, ...ref.ver, ...ref.odl);
     const obstojeci = new Map(idji.map((id, i) => [id, vse[i].exists ? vse[i].get("digest") : null]));
     let seq = vse[idji.length].exists ? vse[idji.length].get("n") : 0;
     const botStanje = new Map(boti.map((b, i) => [b, vse[idji.length + 1 + i].exists ? vse[idji.length + 1 + i].data() : {}]));
     const verStanje = new Map(verzije.map((v, i) => [v, vse[idji.length + 1 + boti.length + i].exists ? vse[idji.length + 1 + boti.length + i].data() : null]));
-    let vstavljeni = 0, dvojniki = 0, posli = 0;
+    const z0 = idji.length + 1 + boti.length + verzije.length;
+    const odlStanje = new Map(odlDni.map((o, i) => [o, vse[z0 + i].exists ? vse[z0 + i].data() : null]));
+    let vstavljeni = 0, dvojniki = 0, posli = 0, analizirati = 0;
     const zapisati = [];
     for (const e of dogodki) {
       const d = odtis(e);
@@ -51,6 +60,14 @@ export async function zapisi(db, dogodki, P = "algo") {
       seq++;
       vstavljeni++;
       if (e.event_type === "deal") posli++;
+      if (["deal", "decision", "signal"].includes(e.event_type)) analizirati++;
+      if (e.event_type === "decision" || e.event_type === "signal") {
+        const k = odlKljuc(e);
+        const o = odlStanje.get(k) || { bot_id: e.bot_id, environment: e.environment, dan: e.event_time_utc.slice(0, 10), signali: 0, kode: {} };
+        if (e.event_type === "signal") o.signali++;
+        else if (typeof e.data.code === "string" && /^[a-z_]{1,64}$/.test(e.data.code)) o.kode[e.data.code] = (o.kode[e.data.code] || 0) + 1;
+        odlStanje.set(k, o);
+      }
       const cas = casUtc(e.event_time_utc);
       zapisati.push([db.collection(Z.dogodki).doc(sha256(e.event_id)), {
         seq, event_id: e.event_id, bot_id: e.bot_id, kind: e.event_type, digest: d, json: kanonicno(e),
@@ -84,10 +101,11 @@ export async function zapisi(db, dogodki, P = "algo") {
       tx.set(ref.stevec, { n: seq });
       for (const [k, b] of botStanje) if (Object.keys(b).length) tx.set(db.collection(Z.boti).doc(k), b);
       for (const [k, v] of verStanje) if (v) tx.set(db.collection(Z.verzije).doc(k), v);
+      for (const [k, o] of odlStanje) if (o) tx.set(db.collection(Z.odlocitve).doc(k), o);
     }
-    return { accepted: dogodki.length, inserted: vstavljeni, duplicates: dvojniki, posli };
+    return { accepted: dogodki.length, inserted: vstavljeni, duplicates: dvojniki, posli, analizirati };
   });
-  if (izid.posli) await preracunaj(db, P);
+  if (izid.posli || izid.analizirati) await preracunaj(db, P);
   return { accepted: izid.accepted, inserted: izid.inserted, duplicates: izid.duplicates };
 }
 
@@ -101,9 +119,34 @@ export async function preracunaj(db, P = "algo") {
     const doSeq = stevec.exists ? stevec.get("n") : 0;
     if (prej.exists && prej.get("do_seq") > doSeq) return;
     const posli = (await tx.get(db.collection(Z.dogodki).where("kind", "==", "deal"))).docs.map((s) => preberi(s).event);
+    const odl = (await tx.get(db.collection(Z.odlocitve).where("dan", ">=", new Date(Date.now() - 31 * 86400000).toISOString().slice(0, 10)))).docs.map((s) => s.data());
     tx.set(db.collection(Z.povzetek).doc("vse"), { json: JSON.stringify(povzetek(posli)), do_seq: doSeq, t: Timestamp.now() });
+    // Samodejna analiza in predlogi (algo-analiza.js), vedno sveža po vsakem poslu, signalu ali zavrnitvi.
+    tx.set(db.collection(Z.povzetek).doc("analiza"), { json: JSON.stringify(analiza(posli, odl)), do_seq: doSeq, t: Timestamp.now() });
   });
 }
+
+// Dnevno poročilo ob 21:00 (Ljubljana): posnetek analize in dneva v algo-porocila/{dan}. Če je bil bot ta dan aktiven,
+// Teo in Tim dobita push (samo »poročilo je pripravljeno«, brez zneskov; vsebina ostane za prijavo z 2FA).
+export async function dnevnoPorocilo(db, zdaj = new Date(), P = "algo") {
+  const Z = zbirke(P);
+  const dan = zdaj.toLocaleDateString("sv-SE", { timeZone: "Europe/Ljubljana" });
+  const posli = (await db.collection(Z.dogodki).where("kind", "==", "deal").get()).docs.map((s) => preberi(s).event);
+  const odl = (await db.collection(Z.odlocitve).where("dan", ">=", new Date(zdaj.getTime() - 31 * 86400000).toISOString().slice(0, 10)).get()).docs.map((s) => s.data());
+  const a = analiza(posli, odl, zdaj.getTime());
+  const danes = dnevniPovzetek(posli, dan);
+  const danesOdl = odl.filter((o) => o.dan === dan);
+  const aktivno = danes.length > 0 || danesOdl.some((o) => o.signali > 0 || Object.keys(o.kode || {}).length > 0);
+  await db.collection("algo-porocila").doc(dan).set({ json: JSON.stringify({ dan, danes, signali_danes: danesOdl, analiza: a }), aktivno, t: Timestamp.now() });
+  if (aktivno && P === "algo")
+    for (const komu of BANKIRJA) await db.collection("trezor-obvestila").doc(`${crypto.randomUUID()}-algo`).set({ komu, od: "algo", vrsta: "algo", kdaj: Timestamp.now() });
+  return { dan, aktivno };
+}
+
+export const algoPorocilo = onSchedule({ schedule: "0 21 * * *", timeZone: "Europe/Ljubljana", region: REGIJA, maxInstances: 1 }, async () => {
+  const izid = await dnevnoPorocilo(getFirestore());
+  console.log(`Algo poročilo ${izid.dan}: ${izid.aktivno ? "aktivno, push poslan" : "brez aktivnosti"}`);
+});
 
 // Preprosta omejitev hitrosti na primerek: največ 120 zahtev na minuto na ključ.
 const okna = new Map();
