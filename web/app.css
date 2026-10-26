@@ -494,3 +494,20 @@ input[type="date"], input[type="time"] { min-height: 48px; }
 .rok.kmalu { color: var(--warn); }
 .rok.danes, .rok.zamuda { color: #fda4af; }
 .item.naloga small .rok { font-size: 12px; margin-left: 4px; }
+
+/* Slike pri nalogah: gumb, sličice in slika čez cel zaslon */
+.slikabtn { flex: none; width: 46px; height: 46px; border-radius: 23px; background: var(--panel2); color: var(--muted); display: grid; place-items: center; }
+.slikabtn svg { width: 22px; height: 22px; }
+.slikabtn:hover { color: var(--accent); }
+.opn.hitro .slikabtn { width: 50px; height: 50px; border-radius: 25px; }
+.n-slike { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }
+.n-slike[hidden] { display: none; }
+.n-slike img, img.n-sl { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); cursor: zoom-in; display: block; }
+.n-slike .n-sl { position: relative; }
+.n-slike .n-sl button { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 11px; background: #000; color: #fff; border: 1px solid var(--line); font-size: 15px; line-height: 19px; }
+.n-slike.cakajo { margin-top: 8px; }
+.slika-dodaj { display: inline-flex; align-items: center; justify-content: center; gap: 8px; margin-top: 8px; }
+.slika-dodaj svg { width: 18px; height: 18px; }
+.slika-cez { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, .92); display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); cursor: zoom-out; }
+.slika-cez img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
+.slika-cez .zapri { position: absolute; top: max(14px, env(safe-area-inset-top)); right: 14px; width: 40px; height: 40px; border-radius: 20px; background: rgba(255, 255, 255, .14); color: #fff; font-size: 26px; line-height: 38px; }

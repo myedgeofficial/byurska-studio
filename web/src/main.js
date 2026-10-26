@@ -35,6 +35,7 @@ const ico = {
   naloge: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`,
   koledar: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="5.5" width="16" height="15" rx="3"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg>`,
   mapa: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 012-2h4l2 2.5h7a2 2 0 012 2v7.5a2 2 0 01-2 2h-13a2 2 0 01-2-2z"/></svg>`,
+  slika: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M20.5 16l-5-5-8.5 8.5"/></svg>`,
   chev: `<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg>`
 };
 
@@ -452,10 +453,11 @@ function mojeNaloge() {
     return `<div class="mn${odprta ? " odprta" : ""}" style="--c:${barvaClana(n.za)}">
     <button class="kljuk" data-mk="${esc(n.mapa)}/${esc(n.id)}" aria-label="Narejeno" aria-pressed="false"></button>
     <div class="mn-b"><button class="mn-t" data-mo="${esc(n.id)}" title="${vec ? (odprta ? "Skrij" : "Pokaži vse") : ""}">${esc(odprta ? n.besedilo : prvaVrstica(n.besedilo))}${vec && !odprta ? " …" : ""}</button>
-    ${metaNaloge(n)}</div></div>`;
+    ${slikeNaloge(n)}${metaNaloge(n)}</div></div>`;
   }).join("") : `<div class="empty">Nimaš odprtih nalog.</div>`}
     ${moje.length > 3 ? `<button class="mn-vec" id="mojeVec">${mojePrikaz.vse ? "Pokaži manj" : `Še ${moje.length - 3}`}</button>` : ""}</div>
-    <div class="hitra"><input id="hn" maxlength="2000" placeholder="Nova naloga, ki ni za nobeno mapo …" enterkeyhint="done"><button class="plusbtn" id="hnd" aria-label="Dodaj nalogo">${ico.plus}</button></div>`}`;
+    <div class="hitra"><input id="hn" maxlength="2000" placeholder="Nova naloga, ki ni za nobeno mapo …" enterkeyhint="done">${gumbSlika("hn")}<button class="plusbtn" id="hnd" aria-label="Dodaj nalogo">${ico.plus}</button></div>
+    ${cakajoceHtml("hn")}`}`;
 }
 function vezMojeNaloge() {
   $("mojeG").onclick = () => {
@@ -468,15 +470,18 @@ function vezMojeNaloge() {
   if ($("hn")) {
     $("hn").value = osnutek.hn || "";
     $("hn").oninput = () => (osnutek.hn = $("hn").value);
+    vezSlike("hn");
     const dodaj = () => {
-      const besedilo = $("hn").value.trim();
+      const besedilo = $("hn").value.trim() || (cakajoce.hn.length ? BREZ_BESEDILA : "");
       if (!besedilo) return toast("Napiši, kaj je treba narediti.");
       $("hn").blur();
       komuNaloga(besedilo, async (za, rok) => {
         $("hn").value = osnutek.hn = "";
+        const datoteke = vzemiCakajoce("hn");
         try {
           const id = await mapaSplosno();
-          await addDoc(zbirka(id, "naloge"), { besedilo, strosek: 0, za, rok, dodal: jaz, ob: Date.now(), ...oznaciNarejeno(false) });
+          const slike = await naloziSlikeNaloge(id, datoteke);
+          await addDoc(zbirka(id, "naloge"), { besedilo, strosek: 0, za, rok, ...(slike.length ? { slike } : {}), dodal: jaz, ob: Date.now(), ...oznaciNarejeno(false) });
           toast(za ? `Naloga je za: ${imeClana(za)}` : "Naloga je za vse");
         } catch (e) { napaka(e); }
       });
@@ -529,7 +534,7 @@ function zaPregled() {
     return `<div class="mn${odprta ? " odprta" : ""}" style="--c:${barvaClana(n.narejenoKdo)}"><div class="mn-b">
     <button class="mn-t" data-mo="${esc(n.id)}">${esc(odprta ? n.besedilo : prvaVrstica(n.besedilo))}${vec && !odprta ? " …" : ""}</button>
     ${odprta && n.porocilo ? `<div class="porocilo">${esc(n.porocilo)}</div>` : ""}
-    ${metaNaloge(n, true)}</div>
+    ${slikeNaloge(n)}${metaNaloge(n, true)}</div>
     <button class="pregledano" data-pr="${esc(n.mapa)}/${esc(n.id)}">Pregledano</button></div>`;
   }).join("")}</div>`;
 }
@@ -1024,6 +1029,87 @@ function pokaziDatoteko(id) {
   });
 }
 
+/* ---------- slike pri nalogah (screenshot, kaj je narobe ali kaj je treba narediti) ---------- */
+// Slike, izbrane ali prilepljene (Ctrl+V / Cmd+V), preden se naloga shrani: tn = TO DO v mapi, hn = domači zaslon, tu = urejanje naloge.
+const cakajoce = { tn: [], hn: [], tu: [] };
+const BREZ_BESEDILA = "Poglej sliko";
+const jeSlika = (f) => !!f && (/^image\//.test(f.type) || /\.(jpe?g|png|heic|heif|gif|webp)$/i.test(f.name || ""));
+const gumbSlika = (k) => `<button type="button" class="slikabtn" id="${k}s" aria-label="Dodaj sliko" title="Dodaj sliko ali prilepi screenshot (Ctrl+V)">${ico.slika}</button><input type="file" id="${k}f" accept="image/*" multiple hidden>`;
+const cakajoceHtml = (k) => `<div class="n-slike cakajo" id="${k}p"${cakajoce[k].length ? "" : " hidden"}>${cakajoce[k].map((f, i) =>
+  `<span class="n-sl"><img src="${f.predogled}" alt=""><button type="button" data-i="${i}" aria-label="Odstrani sliko">×</button></span>`).join("")}</div>`;
+function dodajCakajoce(k, files) {
+  const s = [...(files || [])].filter(jeSlika);
+  s.forEach((f) => { f.predogled = URL.createObjectURL(f); cakajoce[k].push(f); });
+  if (s.length) risiCakajoce(k);
+  return s.length > 0;
+}
+function risiCakajoce(k) {
+  const el = $(k + "p");
+  if (!el) return;
+  el.outerHTML = cakajoceHtml(k);
+  $(k + "p").querySelectorAll("[data-i]").forEach((b) => (b.onclick = () => {
+    const [f] = cakajoce[k].splice(+b.dataset.i, 1);
+    URL.revokeObjectURL(f.predogled); risiCakajoce(k);
+  }));
+}
+function vezSlike(k) {
+  $(k + "s").onclick = () => $(k + "f").click();
+  $(k + "f").onchange = (e) => { dodajCakajoce(k, e.target.files); e.target.value = ""; };
+  risiCakajoce(k);
+}
+const vzemiCakajoce = (k) => cakajoce[k].splice(0).map((f) => (URL.revokeObjectURL(f.predogled), f));
+// Prilepljen screenshot gre k nalogi, ki se ravno piše (urejanje, TO DO v mapi ali hitra naloga na domačem zaslonu).
+document.addEventListener("paste", (e) => {
+  const files = [...(e.clipboardData?.files || [])].filter(jeSlika);
+  if (!files.length) return;
+  const k = $("tuf") ? "tu" : $("tn") ? "tn" : $("hn") ? "hn" : null;
+  if (!k) return;
+  e.preventDefault();
+  dodajCakajoce(k, files);
+  if (k === "tn") { osnutek.odprt = true; $("tn").closest(".opn")?.classList.add("odprt"); }
+  toast(files.length > 1 ? "Slike so dodane k nalogi" : "Slika je dodana k nalogi");
+});
+// Screenshot pomanjšamo na največ 2000 px (JPEG), da se hitro naloži in odpre tudi na telefonu.
+function pomanjsaj(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    const konec = (b) => { URL.revokeObjectURL(url); resolve(b || file); };
+    img.onload = () => {
+      const s = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement("canvas");
+      c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+      try { c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); c.toBlob(konec, "image/jpeg", 0.85); } catch { konec(null); }
+    };
+    img.onerror = () => konec(null);
+    img.src = url;
+  });
+}
+async function naloziSlikeNaloge(mapaId, files) {
+  if (!files.length) return [];
+  toast(files.length > 1 ? "Pošiljam slike …" : "Pošiljam sliko …");
+  return Promise.all(files.map(async (f, i) => {
+    const b = await pomanjsaj(f), konc = b === f ? String(f.name || "").split(".").pop().toLowerCase() : "jpg";
+    const pot = `${potMape(mapaId).join("/")}/naloge/${Date.now()}-${i}.${/^[a-z0-9]{2,5}$/.test(konc) ? konc : "png"}`;
+    const r = ref(storage, pot);
+    await uploadBytes(r, b, { contentType: b.type || "image/jpeg" });
+    return { url: await getDownloadURL(r), pot };
+  }));
+}
+// Sličice pod nalogo; klik odpre sliko čez cel zaslon.
+const slikeNaloge = (n) => n.slike?.length ? `<span class="n-slike">${n.slike.map((s) => `<img class="n-sl" src="${esc(s.url)}" alt="Slika" loading="lazy" data-sl="${esc(s.url)}">`).join("")}</span>` : "";
+function pokaziSliko(url) {
+  const o = document.createElement("div");
+  o.className = "slika-cez";
+  o.innerHTML = `<img src="${esc(url)}" alt=""><button class="zapri" aria-label="Zapri">×</button>`;
+  o.onclick = () => o.remove();
+  document.body.append(o);
+}
+document.addEventListener("click", (e) => {
+  const s = e.target.closest?.("[data-sl]");
+  if (!s) return;
+  e.preventDefault(); e.stopPropagation();
+  pokaziSliko(s.dataset.sl);
+}, true);
+
 /* ---------- TO DO s stroški ---------- */
 // Člani ekipe za izbiro, komu je naloga (Teo, Urška, Nives in kdor je dodan).
 const claniEkipe = () => [...new Set([...Object.keys(ZACETNI_CLANI), ...Object.keys(S.clani)])];
@@ -1050,11 +1136,12 @@ function renderNaloge(el, m) {
   const lahkoPregledam = (n) => n.narejeno && n.narejenoKdo && n.narejenoKdo !== jaz && !(n.pregledal || []).includes(jaz);
   const vrstica = (n) => `<div class="item naloga${n.narejeno ? " done" : ""}" style="--c:${barvaClana(n.narejeno ? n.narejenoKdo || n.za : n.za)}">
     <button class="kljuk" data-k="${esc(n.id)}" aria-label="${n.narejeno ? "Ni narejeno" : "Narejeno"}" aria-pressed="${!!n.narejeno}"></button>
-    <button class="grow" data-n="${esc(n.id)}"><div class="ob">${esc(n.besedilo)}</div>${n.porocilo ? `<div class="porocilo">${esc(n.porocilo)}</div>` : ""}<small>${stanje(n)}</small></button>
+    <button class="grow" data-n="${esc(n.id)}"><div class="ob">${esc(n.besedilo)}</div>${n.porocilo ? `<div class="porocilo">${esc(n.porocilo)}</div>` : ""}${slikeNaloge(n)}<small>${stanje(n)}</small></button>
     ${lahkoPregledam(n) ? `<button class="pregledano" data-pr="${esc(m.id)}/${esc(n.id)}">Pregledano</button>` : ""}
     ${n.strosek ? `<span class="eur">${evri(n.strosek)}</span>` : ""}</div>`;
   el.innerHTML = `<div class="dvo"><div class="dvo-l"><div class="opn hitro${osnutek.odprt ? " odprt" : ""}">
-    <div class="vnos"><textarea id="tn" rows="1" maxlength="2000" placeholder="Nova naloga …"></textarea><button class="plusbtn" id="tdd" aria-label="Dodaj">${ico.plus}</button></div>
+    <div class="vnos"><textarea id="tn" rows="1" maxlength="2000" placeholder="Nova naloga …"></textarea>${gumbSlika("tn")}<button class="plusbtn" id="tdd" aria-label="Dodaj">${ico.plus}</button></div>
+    ${cakajoceHtml("tn")}
     <div class="vec-moznosti">
     <div class="row"><input id="tz" inputmode="decimal" placeholder="Strošek €">${m.zasebna ? "" : `<button class="btn ghost" id="tdn" title="Vpiši delo, ki si ga že opravil, da ga drugi pregledajo">Že opravljeno</button>`}</div></div></div>
     ${vsota(M.naloge) ? `<div class="stroski-v">Stroški <b>${evri(vsota(M.naloge))}</b><span>·</span>še odprto <b>${evri(vsota(odprte))}</b></div>` : ""}</div>
@@ -1066,14 +1153,17 @@ function renderNaloge(el, m) {
   // Kdo, strošek in »Že opravljeno« se pokažejo šele, ko začneš pisati nalogo.
   $("tn").onfocus = () => { osnutek.odprt = true; el.querySelector(".opn").classList.add("odprt"); };
   $("tn").onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); dodaj(false); } };
+  vezSlike("tn");
   const dodaj = (opravljeno) => {
-    const besedilo = $("tn").value.trim();
+    const besedilo = $("tn").value.trim() || (cakajoce.tn.length ? BREZ_BESEDILA : "");
     if (!besedilo) return toast(opravljeno ? "Napiši, kaj je narejeno." : "Napiši, kaj je treba narediti.");
     const strosek = znesek($("tz").value);
     const shrani = (za, rok = "") => {
       // Polji izpraznimo takoj, da se medtem lahko že piše naslednja naloga.
       $("tn").value = ""; $("tz").value = ""; osnutek.tn = osnutek.tz = "";
-      addDoc(zbirka(m.id, "naloge"), { besedilo, strosek, za, ...(rok ? { rok } : {}), dodal: jaz, ob: Date.now(), ...oznaciNarejeno(opravljeno) })
+      const datoteke = vzemiCakajoce("tn");
+      naloziSlikeNaloge(m.id, datoteke)
+        .then((slike) => addDoc(zbirka(m.id, "naloge"), { besedilo, strosek, za, ...(rok ? { rok } : {}), ...(slike.length ? { slike } : {}), dodal: jaz, ob: Date.now(), ...oznaciNarejeno(opravljeno) }))
         .then(() => toast(opravljeno ? "Vpisano, drugi ga vidijo za pregled" : za ? `Naloga je za: ${imeClana(za)}` : "Naloga je za vse")).catch(napaka);
     };
     // Opravljeno delo je tvoje; za novo nalogo na koncu vprašamo, kdo jo mora narediti.
@@ -1104,23 +1194,43 @@ function komuNaloga(besedilo, izberi) {
 
 function urediNalogo(m, n) {
   if (!n) return;
+  vzemiCakajoce("tu");
   openSheet(`<h3>Naloga</h3>
     <textarea id="te" maxlength="2000" style="min-height:110px">${esc(n.besedilo)}</textarea>
     <label>Za koga</label>${izbiraZa("teza", n.za || "")}
     <label for="ter">Do kdaj</label><input id="ter" type="date" value="${esc(n.rok || "")}">
     <label for="tez">Strošek €</label><input id="tez" inputmode="decimal" value="${n.strosek ? esc(String(n.strosek).replace(".", ",")) : ""}" placeholder="0,00">
+    <label>Slike</label><div class="n-slike ured" id="teo"></div>${cakajoceHtml("tu")}
+    <button type="button" class="btn ghost slika-dodaj" id="tus">${ico.slika} Dodaj sliko</button><input type="file" id="tuf" accept="image/*" multiple hidden>
     ${n.narejeno ? `<label for="tep">Kaj je bilo narejeno (za pregled)</label><textarea id="tep" maxlength="2000" placeholder="Povezava, kje je, kaj naj pogledajo ...">${esc(n.porocilo || "")}</textarea>` : ""}
     <p class="small muted">Vpisano: ${esc(imeClana(n.dodal))} · ${esc(kdajBesedilo(n.ob))}</p>
-    <div class="row"><button class="btn" id="tes">Shrani</button><button class="btn danger" id="teb">Izbriši</button></div>`, () => {
+    <div class="row"><button class="btn" id="tesh">Shrani</button><button class="btn danger" id="teb">Izbriši</button></div>`, () => {
     vezIzbiroZa("teza", () => {});
-    $("tes").onclick = () => {
+    // Obstoječe slike: × jo odstrani ob shranjevanju; nove se dodajo kot pri novi nalogi.
+    const ostale = [...(n.slike || [])], odstranjene = [];
+    const risiOstale = () => {
+      $("teo").hidden = !ostale.length;
+      $("teo").innerHTML = ostale.map((s, i) => `<span class="n-sl"><img src="${esc(s.url)}" alt="" data-sl="${esc(s.url)}"><button type="button" data-ost="${i}" aria-label="Odstrani sliko">×</button></span>`).join("");
+      $("teo").querySelectorAll("[data-ost]").forEach((b) => (b.onclick = () => { odstranjene.push(...ostale.splice(+b.dataset.ost, 1)); risiOstale(); }));
+    };
+    risiOstale();
+    vezSlike("tu");
+    $("tesh").onclick = async () => {
       const besedilo = $("te").value.trim();
       if (!besedilo) return toast("Naloga je prazna.");
-      updateDoc(dok(m.id, "naloge", n.id), { besedilo, strosek: znesek($("tez").value), za: izbranZa("teza"), rok: $("ter").value || null, ...($("tep") ? { porocilo: $("tep").value.trim() } : {}), uredil: jaz }).catch(napaka); closeSheet();
+      const polja = { besedilo, strosek: znesek($("tez").value), za: izbranZa("teza"), rok: $("ter").value || null, ...($("tep") ? { porocilo: $("tep").value.trim() } : {}), uredil: jaz };
+      const datoteke = vzemiCakajoce("tu");
+      closeSheet();
+      try {
+        const nove = await naloziSlikeNaloge(m.id, datoteke);
+        await updateDoc(dok(m.id, "naloge", n.id), { ...polja, slike: [...ostale, ...nove] });
+        odstranjene.forEach((s) => deleteObject(ref(storage, s.pot)).catch(() => {}));
+      } catch (e) { napaka(e); }
     };
     $("teb").onclick = () => {
       if (!confirm("Izbrišem nalogo?")) return;
-      deleteDoc(dok(m.id, "naloge", n.id)).catch(napaka); closeSheet();
+      vzemiCakajoce("tu");
+      deleteDoc(dok(m.id, "naloge", n.id)).then(() => (n.slike || []).forEach((s) => deleteObject(ref(storage, s.pot)).catch(() => {}))).catch(napaka); closeSheet();
     };
   });
 }
