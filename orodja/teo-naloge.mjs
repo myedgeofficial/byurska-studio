@@ -66,7 +66,7 @@ if (ukaz === "seznam") {
   const vrstice = await api(":runQuery", { method: "POST", body: JSON.stringify({ structuredQuery: { from: [{ collectionId: "naloge", allDescendants: true }] } }) });
   const naloge = vrstice.filter((v) => v.document).map(({ document: d }) => {
     const p = polja(d.fields), pot = delPoti(d.name);
-    return { mapa: pot[1], imeMape: mape[pot[1]] || pot[1], id: pot[3], besedilo: p.besedilo, za: p.za ? p.za : "vsi", strosek: p.strosek || 0, dodal: p.dodal, ob: p.ob ? new Date(p.ob).toISOString() : null, _p: p };
+    return { mapa: pot[1], imeMape: mape[pot[1]] || pot[1], id: pot[3], besedilo: p.besedilo, za: p.za ? p.za : "vsi", strosek: p.strosek || 0, dodal: p.dodal, ob: p.ob ? new Date(p.ob).toISOString() : null, ...(p.slike?.length ? { slike: p.slike.map((s) => s.url) } : {}), _p: p };
   }).filter((n) => !n._p.narejeno && !n._p.teoPreskoci && (n.za === "vsi" || String(n.za).toLowerCase() === jaz))
     .map(({ _p, ...n }) => n).sort((a, b) => String(a.ob).localeCompare(String(b.ob)));
   console.log(JSON.stringify(naloge, null, 2));
