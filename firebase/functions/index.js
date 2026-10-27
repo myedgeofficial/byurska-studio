@@ -100,3 +100,5 @@ export const novaNaloga = onDocumentWritten({ document: "mape/{mapa}/naloge/{id}
 export { trezorObvestilo, trezorOpomniki } from "./trezor.js";
 // REMAKO banka: Algo Lab, dogodki iz MT5 (algo.js). Samo nadzor, brez naročil.
 export { algo, algoPreizkus, algoPorocilo } from "./algo.js";
+// Statistika vseh spletnih strani (stats.remako.si).
+export { stevec, statistikaZberi, statistikaOsvezi } from "./statistika.js";

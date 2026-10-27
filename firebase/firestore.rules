@@ -15,7 +15,7 @@ service cloud.firestore {
     // Vse skupno vidijo vsi člani, razen osebnih map (zasebno/{e-pošta}/...) in REMAKO trezorja.
     match /{document=**} {
       allow read, write: if clan() && !(request.path[3] in ['zasebno', 'trezor', 'trezor-stanje', 'trezor-naprave', 'trezor-obvestila'])
-        && !request.path[3].matches('^algo-.*');
+        && !request.path[3].matches('^(algo|stat)-.*');
     }
     // Naloge vseh map naenkrat (domači zaslon »Moje naloge«).
     match /{pot=**}/naloge/{id} {
@@ -94,6 +94,11 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['besedilo', 'avtor', 't']) && request.resource.data.keys().hasAll(['besedilo', 'avtor', 't'])
         && request.resource.data.besedilo is string && request.resource.data.besedilo.size() <= 4000
         && request.resource.data.avtor == email() && request.resource.data.t == request.time;
+    }
+    // Statistika spletnih strani (stats.remako.si): samo branje povzetka; piše samo funkcija (statistika.js).
+    // Števec (stat-dan, stat-obisk, stat-sol) brskalniku ni dostopen.
+    match /stat-povzetek/{id} {
+      allow read: if bankir();
     }
   }
 }

@@ -1,0 +1,31 @@
+<!-- REMAKO števec obiskov (stats.remako.si): brez piškotkov in brez shrambe v brskalniku. Prilepi pred </body>.
+     Pošlje samo pot strani, od kod je obiskovalec prišel, časovni pas, jezik, širino zaslona in koliko časa je bil na strani. -->
+<script>
+(function () {
+  if (navigator.webdriver || /^(localhost|127\.|192\.168\.)/.test(location.hostname)) return;
+  var U = "https://europe-west1-byurska-studio.cloudfunctions.net/stevec", pot = location.pathname, od = document.referrer, vidno = 0, zacetek = Date.now(), konec = 0;
+  function poslji(o) { o.p = pot; try { navigator.sendBeacon(U, JSON.stringify(o)); } catch (e) {} }
+  function ogled() {
+    var q = new URLSearchParams(location.search), tz = "";
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
+    vidno = 0; zacetek = document.visibilityState === "hidden" ? 0 : Date.now(); konec = 0;
+    poslji({ t: "v", r: od, us: q.get("utm_source") || q.get("ref") || "", tz: tz, l: navigator.language || "", w: screen.width });
+  }
+  function cas() { return Math.round((vidno + (zacetek ? Date.now() - zacetek : 0)) / 1000); }
+  function zakljuci() { if (konec) return; konec = 1; var d = cas(); if (d > 0) poslji({ t: "k", d: d }); }
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") { if (zacetek) vidno += Date.now() - zacetek; zacetek = 0; zakljuci(); }
+    else if (!zacetek) { zacetek = Date.now(); }
+  });
+  addEventListener("pagehide", zakljuci);
+  // Strani, ki menjajo naslov brez nalaganja (Next.js): vsaka nova pot je nov ogled.
+  function preveri() {
+    if (location.pathname === pot) return;
+    zakljuci(); od = location.origin + pot; pot = location.pathname; ogled();
+  }
+  var push = history.pushState;
+  history.pushState = function () { push.apply(this, arguments); setTimeout(preveri, 0); };
+  addEventListener("popstate", preveri);
+  ogled();
+})();
+</script>
