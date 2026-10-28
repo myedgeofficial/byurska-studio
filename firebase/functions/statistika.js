@@ -78,6 +78,7 @@ export const stevec = onRequest({ region: REGIJA, maxInstances: 5, memory: "256M
 
 /* ---------- Zbiranje ---------- */
 
+// Metadatni strežnik hoče več obsegov ločenih z vejico (s presledkom vrne 400).
 async function gZeton(obseg) {
   const r = await fetch(`http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token?scopes=${encodeURIComponent(obseg)}`,
     { headers: { "Metadata-Flavor": "Google" } });
@@ -176,7 +177,7 @@ async function myedge() {
 
 // Nakupko in Popravko (aplikaciji): samo branje /nadzor, ki ga polni Nakupkova funkcija.
 async function nakupko() {
-  const z = await gZeton("https://www.googleapis.com/auth/firebase.database https://www.googleapis.com/auth/userinfo.email");
+  const z = await gZeton("https://www.googleapis.com/auth/firebase.database,https://www.googleapis.com/auth/userinfo.email");
   const r = await fetch(`${NAKUPKO_DB}/nadzor.json`, { headers: { authorization: "Bearer " + z } });
   if (!r.ok) throw new Error("Nakupko /nadzor " + r.status + (r.status === 401 || r.status === 403 ? ": račun funkcije še nima pravice branja v projektu nakupko-8ad19" : ""));
   const n = (await r.json()) || {}, tecaji = n.tecaji || { EUR: 1 };
