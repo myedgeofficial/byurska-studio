@@ -44,6 +44,19 @@ jobs:
           print('$d', 'osvezeno', ts(o), '| zadnji dan', dni[-1:] , '| polja', sorted(f.keys()), '| napake', nap, '| gsc napaka', g.get('napaka',{}).get('stringValue'))
           "
           done
+      - name: Zadetki števca (zadnji 2 uri, samo stran, vrsta naprave, status)
+        run: |
+          gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="stevec" AND logName:"run.googleapis.com%2Frequests"' \
+            --project "$P" --freshness=2h --limit 2000 --format=json | python3 -c "
+          import json,sys,collections,urllib.parse
+          c=collections.Counter()
+          for e in json.load(sys.stdin):
+            r=e.get('httpRequest',{}); ua=r.get('userAgent','')
+            naprava='iPhone' if 'iPhone' in ua else 'Android' if 'Android' in ua else 'drugo'
+            c[(e['timestamp'][11:15]+'0', urllib.parse.urlparse(r.get('referer','')).hostname, naprava, r.get('requestMethod'), r.get('status'))]+=1
+          for k,v in sorted(c.items()): print(k, v)
+          "
+          gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="stevec" AND severity>=WARNING' --project "$P" --freshness=6h --limit 10 --format='value(timestamp,textPayload)' | cut -c1-300 || true
       - name: Dnevniki funkcij (zadnja ura)
         run: |
           gcloud logging read 'resource.type="cloud_run_revision" AND (resource.labels.service_name="statistikazberi" OR resource.labels.service_name="statistikaosvezi") AND (severity>=WARNING OR textPayload:"statistika zbrana")' \
