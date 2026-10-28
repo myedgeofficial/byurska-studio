@@ -126,7 +126,8 @@ async function gsc(zeton, lastnosti, stran) {
     if (!r.ok) throw new Error("Search Console " + r.status + " " + (await r.text()).slice(0, 160));
     return (await r.json()).rows || [];
   };
-  const vrstica = (x) => [x.keys[0], x.clicks, x.impressions, Math.round(x.position * 10) / 10];
+  // Firestore ne dovoli seznama v seznamu, zato je vrstica predmet { k: ključ, v: [kliki, prikazi, pozicija] }.
+  const vrstica = (x) => ({ k: x.keys[0], v: [x.clicks, x.impressions, Math.round(x.position * 10) / 10] });
   const [dnevi, poizvedbe, strani, drzave, naprave] = await Promise.all([
     vprasaj(["date"], 480, 1000), vprasaj(["query"], 28, 30), vprasaj(["page"], 28, 25), vprasaj(["country"], 28, 20), vprasaj(["device"], 28, 5)]);
   return {
