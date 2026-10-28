@@ -1,6 +1,6 @@
 // Statistika vseh spletnih strani (stats.remako.si, samo Teo in Tim z Google prijavo in kodo 2FA).
 //   stevec               POST iz skripte na straneh (sendBeacon): ogled strani ali čas na strani. Brez piškotkov.
-//   statistikaZberi      vsako uro: promet iz števca, Search Console, Stripe, baza myedgeofficial.com, Nakupko /nadzor
+//   statistikaZberi      vsakih 15 minut: promet iz števca, Search Console, Stripe, baza myedgeofficial.com, Nakupko /nadzor
 //   statistikaOsvezi     gumb »Osveži« na plošči (isto kot zgoraj, takoj)
 // Rezultat je v stat-povzetek/{stran} in stat-povzetek/skupno; brskalnik bere samo to (pravila: bankir()).
 // Ključi (Stripe) so samo v okolju funkcije, v brskalnik ne pride nič od tega.
@@ -240,7 +240,7 @@ async function zberi() {
   console.log("statistika zbrana", JSON.stringify(napake));
 }
 
-export const statistikaZberi = onSchedule({ schedule: "7 * * * *", timeZone: "Europe/Ljubljana", region: REGIJA, timeoutSeconds: 300, memory: "512MiB" }, zberi);
+export const statistikaZberi = onSchedule({ schedule: "*/15 * * * *", timeZone: "Europe/Ljubljana", region: REGIJA, timeoutSeconds: 300, memory: "512MiB" }, zberi);
 
 export const statistikaOsvezi = onCall({ region: REGIJA, timeoutSeconds: 300, memory: "512MiB" }, async (req) => {
   const t = req.auth?.token || {};
