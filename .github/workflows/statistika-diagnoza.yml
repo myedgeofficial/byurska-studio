@@ -54,7 +54,7 @@ jobs:
             r=e.get('httpRequest',{}); ua=r.get('userAgent','')
             naprava='iPhone' if 'iPhone' in ua else 'Android' if 'Android' in ua else 'drugo'
             c[(e['timestamp'][11:15]+'0', urllib.parse.urlparse(r.get('referer','')).hostname, naprava, r.get('requestMethod'), r.get('status'))]+=1
-          for k,v in sorted(c.items()): print(k, v)
+          for k,v in sorted(c.items(), key=str): print(k, v)
           "
           gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="stevec" AND severity>=WARNING' --project "$P" --freshness=6h --limit 10 --format='value(timestamp,textPayload)' | cut -c1-300 || true
       - name: Dnevniki funkcij (zadnja ura)
