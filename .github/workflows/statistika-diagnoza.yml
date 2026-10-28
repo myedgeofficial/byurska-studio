@@ -1,0 +1,50 @@
+name: Statistika – diagnoza
+
+# Ročni pregled, ali se REMAKO statistika osvežuje: čas zadnjega zbiranja, napake virov, stanje urnika in zadnji dnevniki.
+# Repo je javen, zato izpiše samo čase in napake, nikoli številk (obiski, prihodki).
+on:
+  workflow_dispatch:
+    inputs:
+      zazeni:
+        description: "Zaženi zbiranje zdaj (statistikaZberi)"
+        type: boolean
+        default: false
+
+jobs:
+  diagnoza:
+    runs-on: ubuntu-latest
+    env:
+      P: ${{ vars.FIREBASE_PROJECT || 'byurska-studio' }}
+    steps:
+      - name: Prijava
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          gcloud auth activate-service-account --key-file="$RUNNER_TEMP/sa.json" --quiet
+      - name: Urnik
+        run: |
+          gcloud scheduler jobs list --project "$P" --location europe-west1 --format='table(name.basename(),schedule,state,lastAttemptTime,status.code)' || true
+          if [ "${{ inputs.zazeni }}" = "true" ]; then
+            J=$(gcloud scheduler jobs list --project "$P" --location europe-west1 --format='value(name.basename())' | grep -i statistikazberi | head -1)
+            gcloud scheduler jobs run "$J" --project "$P" --location europe-west1 && sleep 150
+          fi
+      - name: Stanje v bazi (samo časi in napake)
+        run: |
+          T=$(gcloud auth print-access-token)
+          for d in skupno myedge remako nakupko byurska; do
+            curl -sS -H "Authorization: Bearer $T" "https://firestore.googleapis.com/v1/projects/$P/databases/(default)/documents/stat-povzetek/$d" | python3 -c "
+          import json,sys,datetime
+          d=json.load(sys.stdin); f=d.get('fields',{})
+          ts=lambda v: datetime.datetime.fromtimestamp(int(v)/1000).isoformat() if v else None
+          o=f.get('osvezeno',{}).get('integerValue')
+          dni=sorted((f.get('dnevi',{}).get('mapValue',{}).get('fields') or {}).keys())
+          nap={k:v.get('stringValue','')[:200] for k,v in (f.get('napake',{}).get('mapValue',{}).get('fields') or {}).items()}
+          g=f.get('gsc',{}).get('mapValue',{}).get('fields',{})
+          print('$d', 'osvezeno', ts(o), '| zadnji dan', dni[-1:] , '| polja', sorted(f.keys()), '| napake', nap, '| gsc napaka', g.get('napaka',{}).get('stringValue'))
+          "
+          done
+      - name: Dnevniki funkcij (zadnja ura)
+        run: |
+          gcloud logging read 'resource.type="cloud_run_revision" AND (resource.labels.service_name="statistikazberi" OR resource.labels.service_name="statistikaosvezi") AND (severity>=WARNING OR textPayload:"statistika zbrana")' \
+            --project "$P" --freshness=3h --limit 30 --format='value(timestamp,severity,resource.labels.service_name,textPayload)' | cut -c1-400 || true
