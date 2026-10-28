@@ -11,8 +11,9 @@ import { getFirestore, FieldValue, FieldPath } from "firebase-admin/firestore";
 import { STRANI, IMENA, BOT, vir, naprava, drzava, pot, zgosti, danLj, dodajDni, narocnine, dnevniZapis } from "./stat-jedro.js";
 
 const REGIJA = "europe-west1";
-// Statistiko vidijo samo Teo, Urška in Anđela (Google prijava).
-const BRALCI = ["teo.simonic7@gmail.com", "urska.repusic@gmail.com", "repusicurska@gmail.com", "andjela.collab@gmail.com"];
+// Statistiko vidijo samo Teo, Tim, Urška in Anđela (Google prijava); Teo in Tim še s kodo 2FA.
+const Z_2FA = ["teo.simonic7@gmail.com", "tim.petrovic@gmail.com"];
+const BRALCI = [...Z_2FA, "urska.repusic@gmail.com", "repusicurska@gmail.com", "andjela.collab@gmail.com"];
 const MYEDGE_API = "https://www.myedgeofficial.com/api/internal/stats";
 const NAKUPKO_DB = "https://nakupko-8ad19-default-rtdb.europe-west1.firebasedatabase.app";
 const db = () => getFirestore();
@@ -242,8 +243,9 @@ export const statistikaZberi = onSchedule({ schedule: "7 * * * *", timeZone: "Eu
 
 export const statistikaOsvezi = onCall({ region: REGIJA, timeoutSeconds: 300, memory: "512MiB" }, async (req) => {
   const t = req.auth?.token || {};
-  if (!t.email_verified || !BRALCI.includes(String(t.email || "").toLowerCase()))
-    throw new HttpsError("permission-denied", "Samo Teo, Urška in Anđela.");
+  if (!t.email_verified || !BRALCI.includes(String(t.email || "").toLowerCase())
+    || (Z_2FA.includes(String(t.email).toLowerCase()) && t.firebase?.sign_in_second_factor !== "totp"))
+    throw new HttpsError("permission-denied", "Samo Teo, Tim, Urška in Anđela.");
   const zadnje = (await db().doc("stat-povzetek/skupno").get()).data()?.osvezeno || 0;
   if (Date.now() - zadnje > 60_000) await zberi();
   return { ok: true };

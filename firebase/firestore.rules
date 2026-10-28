@@ -97,10 +97,10 @@ service cloud.firestore {
     }
     // Statistika spletnih strani (stats.remako.si): samo branje povzetka; piše samo funkcija (statistika.js).
     // Števec (stat-dan, stat-obisk, stat-sol) brskalniku ni dostopen.
-    // REMAKO statistika: berejo samo Teo, Urška in Anđela, prijavljeni z Google računom.
+    // REMAKO statistika: berejo samo Teo in Tim (Google + koda 2FA) ter Urška in Anđela (Google prijava).
     match /stat-povzetek/{id} {
-      allow read: if request.auth != null && request.auth.token.email_verified == true
-        && email() in ['teo.simonic7@gmail.com', 'urska.repusic@gmail.com', 'repusicurska@gmail.com', 'andjela.collab@gmail.com'];
+      allow read: if bankir() || (request.auth != null && request.auth.token.email_verified == true
+        && email() in ['urska.repusic@gmail.com', 'repusicurska@gmail.com', 'andjela.collab@gmail.com']);
     }
   }
 }
