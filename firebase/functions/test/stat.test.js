@@ -55,4 +55,10 @@ test("dnevni zapis obdrži samo vrh", () => {
   assert.equal(Object.keys(z.poti).length, 20);
   assert.equal(z.poti["/p49"], 49);
   assert.equal(dnevniZapis({ ogledi: 5, poti }, false).poti, undefined);
+  const u = dnevniZapis({ ogledi: 3, ure: { 9: 2, 14: 1 }, ureV: { 9: 1 } });
+  assert.equal(u.uo.length, 24);
+  assert.equal(u.uo[9], 2);
+  assert.equal(u.u[9], 1);
+  assert.equal(u.u[14], 0);
+  assert.equal(dnevniZapis({ ure: { 9: 2 } }, false).uo, undefined);
 });

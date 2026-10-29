@@ -8,7 +8,7 @@ import crypto from "node:crypto";
 import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { getFirestore, FieldValue, FieldPath } from "firebase-admin/firestore";
-import { STRANI, IMENA, BOT, vir, naprava, drzava, pot, zgosti, danLj, dodajDni, narocnine, dnevniZapis } from "./stat-jedro.js";
+import { STRANI, IMENA, BOT, vir, naprava, drzava, pot, zgosti, danLj, uraLj, dodajDni, narocnine, dnevniZapis } from "./stat-jedro.js";
 
 const REGIJA = "europe-west1";
 // Statistiko vidijo samo Teo, Tim, Urška in Anđela (Google prijava); Teo in Tim še s kodo 2FA.
@@ -66,8 +66,9 @@ export const stevec = onRequest({ region: REGIJA, maxInstances: 5, memory: "256M
       const s = await tx.get(vref);
       const k = (s.exists ? s.data().n : 0) + 1;
       tx.set(vref, { n: k, dan });
-      const u = { site: stran, dan, ogledi: inc(), poti: { [p]: inc() } };
-      if (k === 1) Object.assign(u, { obiskovalci: inc(), odboji: inc(), drzave: { [drz]: inc() }, naprave: { [n.tip]: inc() }, os: { [n.os]: inc() }, brskalniki: { [n.brskalnik]: inc() } });
+      const ura = String(uraLj());
+      const u = { site: stran, dan, ogledi: inc(), poti: { [p]: inc() }, ure: { [ura]: inc() } };
+      if (k === 1) Object.assign(u, { ureV: { [ura]: inc() }, obiskovalci: inc(), odboji: inc(), drzave: { [drz]: inc() }, naprave: { [n.tip]: inc() }, os: { [n.os]: inc() }, brskalniki: { [n.brskalnik]: inc() } });
       if (k === 2) u.odboji = inc(-1);
       if (v) Object.assign(u, { viri: { [v[0]]: inc() }, vir2: { [`${v[0]} · ${v[1]}`]: inc() }, vstopi: { [p]: inc() } });
       tx.set(dref, u, { merge: true });
