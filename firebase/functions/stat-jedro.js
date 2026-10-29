@@ -102,6 +102,8 @@ export const zgosti = (...deli) => crypto.createHash("sha256").update(deli.join(
 
 // Dan po slovenskem času (YYYY-MM-DD).
 export const danLj = (d = new Date()) => d.toLocaleDateString("sv-SE", { timeZone: "Europe/Ljubljana" });
+// Ura dneva v Ljubljani (0–23), za graf po urah.
+export const uraLj = (d = new Date()) => +d.toLocaleString("en-GB", { timeZone: "Europe/Ljubljana", hour: "2-digit", hourCycle: "h23" }) % 24;
 export const dodajDni = (s, n) => { const d = new Date(s + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 
 // Stripe: mesečni znesek naročnine (MRR) v centih, ne glede na obdobje cene.
@@ -146,5 +148,7 @@ export function vrh(obj, n = 30) {
 export function dnevniZapis(d, polno = true) {
   const z = { o: d.ogledi || 0, v: d.obiskovalci || 0, b: d.odboji || 0, cs: d.casSum || 0, cn: d.casN || 0 };
   if (polno) for (const k of ["poti", "viri", "vir2", "drzave", "naprave", "os", "brskalniki", "vstopi"]) if (d[k]) z[k] = vrh(d[k], 20);
+  // Po urah (ljudje u, ogledi uo) kot seznam 24 števil; števec jih šteje od 29. 10. 2026.
+  if (polno) for (const [k, iz] of [["u", "ureV"], ["uo", "ure"]]) if (d[iz]) z[k] = Array.from({ length: 24 }, (_, h) => d[iz][h] || 0);
   return z;
 }
