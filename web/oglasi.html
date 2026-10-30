@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="sl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Poveži reklame · REMAKO statistika</title>
+  <!-- Enkratna povezava računa AdMob/AdSense za stats.remako.si (glej firebase/functions/oglasi.js). -->
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #1c1526; color: #fff; font: 500 17px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 440px; margin: 16px; padding: 30px; border-radius: 24px; background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .15); text-align: center; display: grid; gap: 14px; }
+    h1 { margin: 0; font-size: 26px; }
+    p { margin: 0; color: rgba(255, 255, 255, .78); }
+    button { font: inherit; font-weight: 700; border: 0; border-radius: 999px; padding: 14px 22px; background: linear-gradient(135deg, #ffb27a, #ff7a59); color: #1a1020; cursor: pointer; }
+    button:disabled { opacity: .6; }
+    .napaka { color: #fda4af; } .ok { color: #6ee7b7; font-weight: 700; }
+  </style>
+  <script src="https://accounts.google.com/gsi/client" async></script>
+</head>
+<body>
+  <main>
+    <h1>Poveži reklame</h1>
+    <p>Prijavi se z Google računom, ki ima <b>AdMob</b> ali <b>AdSense</b> (REMAKO ali My Edge). Statistika bo potem sama brala zaslužek od reklam. Računov je lahko več: ponovi za vsakega.</p>
+    <p>Če Google pokaže »aplikacija ni preverjena«, klikni <b>Napredno → Nadaljuj</b>. Dostop je samo za branje.</p>
+    <button id="gumb" type="button" disabled>Nalagam …</button>
+    <p id="sporocilo"></p>
+  </main>
+  <script>
+    const API = "https://europe-west1-byurska-studio.cloudfunctions.net/statistikaOglasi";
+    const s = new URLSearchParams(location.search).get("s") || "";
+    const gumb = document.getElementById("gumb"), sp = document.getElementById("sporocilo");
+    const javi = (t, cls) => { sp.textContent = t; sp.className = cls || ""; };
+    (async () => {
+      const r = await fetch(API + "?s=" + encodeURIComponent(s));
+      const x = await r.json().catch(() => ({}));
+      if (!r.ok) { gumb.hidden = true; return javi(x.napaka || "Povezava ne velja.", "napaka"); }
+      while (!window.google?.accounts?.oauth2) await new Promise((k) => setTimeout(k, 100));
+      const odjemalec = google.accounts.oauth2.initCodeClient({
+        client_id: x.clientId, scope: x.obseg, ux_mode: "popup", select_account: true,
+        error_callback: () => { gumb.disabled = false; },
+        callback: async (o) => {
+          if (o.error) { gumb.disabled = false; return javi("Prijava ni uspela: " + o.error, "napaka"); }
+          javi("Shranjujem …");
+          const p = await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ s, koda: o.code }) });
+          const y = await p.json().catch(() => ({}));
+          if (!p.ok) { gumb.disabled = false; return javi(y.napaka || "Ni uspelo.", "napaka"); }
+          gumb.hidden = true;
+          javi(`Povezano: ${y.email}${y.admob ? " · AdMob" : ""}${y.adsense ? " · AdSense" : ""}. Zapri to okno in na stats.remako.si klikni »Osveži«.`, "ok");
+        },
+      });
+      gumb.textContent = "Prijava z Google";
+      gumb.disabled = false;
+      gumb.onclick = () => { gumb.disabled = true; javi(""); odjemalec.requestCode(); };
+    })().catch((e) => javi("Napaka: " + e.message, "napaka"));
+  </script>
+</body>
+</html>

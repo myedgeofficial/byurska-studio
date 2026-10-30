@@ -2,12 +2,14 @@
 //   stevec               POST iz skripte na straneh (sendBeacon): ogled strani ali čas na strani. Brez piškotkov.
 //   statistikaZberi      vsakih 15 minut: promet iz števca, Search Console, Stripe, baza myedgeofficial.com, Nakupko /nadzor
 //   statistikaOsvezi     gumb »Osveži« na plošči (isto kot zgoraj, takoj)
+//   statistikaOglasiZacni, statistikaOglasi   povezava računa AdMob/AdSense (oglasi.js), zaslužek od reklam enkrat na uro
 // Rezultat je v stat-povzetek/{stran} in stat-povzetek/skupno; brskalnik bere samo to (pravila: bankir()).
 // Ključi (Stripe) so samo v okolju funkcije, v brskalnik ne pride nič od tega.
 import crypto from "node:crypto";
 import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { getFirestore, FieldValue, FieldPath } from "firebase-admin/firestore";
+import { oglasi, oglasiZacni } from "./oglasi.js";
 import { STRANI, IMENA, BOT, vir, naprava, drzava, pot, zgosti, danLj, uraLj, dodajDni, narocnine, dnevniZapis } from "./stat-jedro.js";
 
 const REGIJA = "europe-west1";
@@ -224,10 +226,11 @@ async function zberi() {
   const viri = [
     ["stripeSp", process.env.STRIPE_SP_KEY && (() => stripe(process.env.STRIPE_SP_KEY))],
     ["stripeRemako", process.env.STRIPE_REMAKO_KEY && (() => stripe(process.env.STRIPE_REMAKO_KEY))],
-    ["myedge", myedge], ["nakupko", nakupko]];
+    ["myedge", myedge], ["nakupko", nakupko],
+    ["oglasi", async () => oglasi((await db().doc("stat-povzetek/skupno").get()).data()?.oglasi)]];
   await Promise.all(viri.map(async ([k, f]) => {
     if (!f) { napake[k] = "ključ še ni nastavljen"; return; }
-    try { skupno[k] = await f(); } catch (e) { napake[k] = e.message; }
+    try { const x = await f(); if (x) skupno[k] = x; } catch (e) { napake[k] = e.message; }
   }));
   skupno.napake = napake;
   // Kar je že bilo prebrano, ostane, če vir tokrat ne odgovori (zamenjamo samo polja, ki smo jih prebrali).
@@ -244,11 +247,14 @@ async function zberi() {
 
 export const statistikaZberi = onSchedule({ schedule: "*/15 * * * *", timeZone: "Europe/Ljubljana", region: REGIJA, timeoutSeconds: 300, memory: "512MiB" }, zberi);
 
+const bralec = (t) => t.email_verified && BRALCI.includes(String(t.email || "").toLowerCase())
+  && !(Z_2FA.includes(String(t.email).toLowerCase()) && t.firebase?.sign_in_second_factor !== "totp");
+
+export const statistikaOglasiZacni = oglasiZacni(bralec);
+export { statistikaOglasi } from "./oglasi.js";
+
 export const statistikaOsvezi = onCall({ region: REGIJA, timeoutSeconds: 300, memory: "512MiB" }, async (req) => {
-  const t = req.auth?.token || {};
-  if (!t.email_verified || !BRALCI.includes(String(t.email || "").toLowerCase())
-    || (Z_2FA.includes(String(t.email).toLowerCase()) && t.firebase?.sign_in_second_factor !== "totp"))
-    throw new HttpsError("permission-denied", "Samo Teo, Tim, Urška in Anđela.");
+  if (!bralec(req.auth?.token || {})) throw new HttpsError("permission-denied", "Samo Teo, Tim, Urška in Anđela.");
   const zadnje = (await db().doc("stat-povzetek/skupno").get()).data()?.osvezeno || 0;
   if (Date.now() - zadnje > 60_000) await zberi();
   return { ok: true };
