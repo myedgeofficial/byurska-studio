@@ -42,6 +42,7 @@ jobs:
           echo "SPLETNI_KLJUC=$(printf '%s' "$STUDIO_FB_CONFIG" | python3 -c 'import json,sys;print(json.load(sys.stdin)["apiKey"])')"
           (cd app && npm ci && node scripts/build-www.js)
           test -f app/www/index.html && rm -rf firebase/www && cp -r app/www firebase/www
+          cp web/oglasi.html firebase/www/oglasi.html  # povezava AdMob/AdSense za stats.remako.si
           cd firebase
           $FB hosting:sites:get "$P" > /dev/null 2>&1 || $FB hosting:sites:create "$P" || true
           $FB deploy --only hosting --force

@@ -62,3 +62,13 @@ test("dnevni zapis obdrži samo vrh", () => {
   assert.equal(u.u[14], 0);
   assert.equal(dnevniZapis({ ure: { 9: 2 } }, false).uo, undefined);
 });
+
+test("ključi za reklame (AdMob aplikacija, AdSense domena)", async () => {
+  const { kljucAplikacije, kljucDomene } = await import("../oglasi.js");
+  assert.equal(kljucAplikacije("Nakupko (iOS)"), "nakupko");
+  assert.equal(kljucAplikacije("Popravko"), "popravko");
+  assert.equal(kljucAplikacije("Fixko – Android"), "fixko");
+  assert.equal(kljucDomene("www.nakupko.com"), "nakupko");
+  assert.equal(kljucDomene("remako.si"), "remako");
+  assert.equal(kljucDomene("www.drugo.si"), "drugo.si");
+});
