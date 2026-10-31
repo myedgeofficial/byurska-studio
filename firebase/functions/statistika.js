@@ -190,6 +190,7 @@ async function nakupko() {
   for (const [d, poApp] of Object.entries(n.apple?.poAplikacijah || {})) {
     if (d < meja) continue;
     for (const [a, x] of Object.entries(poApp || {})) {
+      if (!x || typeof x !== "object") continue; // »koncno: true« je oznaka dneva, ne aplikacija
       const t = ((app[a] = app[a] || { dnevi: {} }).dnevi[d] = app[a].dnevi[d] || { p: 0, n: 0, e: 0 });
       t.p += x.prenosi || 0; t.n += x.narocnine || 0; t.e += eur(x.izplacilo);
     }
