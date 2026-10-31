@@ -25,6 +25,11 @@ console.log("\n== Prenosi po aplikacijah ==");
 const stat = {};
 for (const [a, x] of Object.entries(s.nakupko?.app || {})) stat[a] = dnevi.reduce((v, d) => v + (x.dnevi?.[d]?.p || 0), 0);
 for (const [a, x] of Object.entries(s.nakupko?.app || {})) vrstica("statistika", a, stat[a], "(Play skupaj vseh časov: " + (x.play ?? "–") + ")");
+for (const [a, x] of Object.entries(s.nakupko?.app || {})) {
+  const dd = Object.entries(x.dnevi || {}).filter(([, v]) => v.p || v.e || v.n);
+  vrstica("statistika vsi dnevi", a, "dni z vrednostmi " + dd.length, dd.slice(-3).map(([d, v]) => d + JSON.stringify(v)).join(" "));
+}
+console.log("aktivni (oblika):", JSON.stringify(s.nakupko?.aktivni ?? null).slice(0, 300));
 
 const { KEY_ID, ISSUER_ID, KEY_P8 } = process.env;
 let vendor = process.env.VENDOR || "";
@@ -42,7 +47,10 @@ if (KEY_ID && ISSUER_ID && KEY_P8 && vendor) {
   const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
   const glava = b64({ alg: "ES256", kid: KEY_ID, typ: "JWT" });
   const tel = b64({ iss: ISSUER_ID, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 1200, aud: "appstoreconnect-v1" });
-  const pod = crypto.sign("sha256", Buffer.from(glava + "." + tel), { key: KEY_P8.replace(/\\n/g, "\n"), dsaEncoding: "ieee-p1363" }).toString("base64url");
+  // Ključ je lahko prilepljen z \n, brez glave ali v eni vrstici (kot v ios.yml): sestavimo čist PEM.
+  const telo = KEY_P8.replace(/\uFEFF/g, "").replace(/\\n/g, "\n").replace(/-----(BEGIN|END)[A-Z ]*-----/g, "").replace(/[^A-Za-z0-9+/=]/g, "");
+  const pem = "-----BEGIN PRIVATE KEY-----\n" + telo.match(/.{1,64}/g).join("\n") + "\n-----END PRIVATE KEY-----\n";
+  const pod = crypto.sign("sha256", Buffer.from(glava + "." + tel), { key: pem, dsaEncoding: "ieee-p1363" }).toString("base64url");
   const jwt = `${glava}.${tel}.${pod}`;
   const apple = {}, vsiTipi = {};
   let manjka = 0;
