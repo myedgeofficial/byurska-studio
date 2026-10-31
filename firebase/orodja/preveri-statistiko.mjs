@@ -65,6 +65,7 @@ if (KEY_ID && ISSUER_ID && KEY_P8 && vendor) {
       const c = l.split("\t"), tip = c[i("Product Type Identifier")], ime = c[i("Title")], u = +c[i("Units")] || 0;
       (vsiTipi[ime] = vsiTipi[ime] || {})[tip] = (vsiTipi[ime][tip] || 0) + u;
       if (["1", "1F", "1T", "F1"].includes(tip)) apple[ime] = (apple[ime] || 0) + u;
+      if (u && !/nakupko/i.test(ime)) console.log("Apple vrstica", d, ime, "tip", tip, "enot", u, "SKU", c[i("SKU")], "Apple ID", c[i("Apple Identifier")], "Parent", c[i("Parent Identifier")]);
     }
   }
   for (const [a, v] of Object.entries(apple)) vrstica("Apple prvi prenosi", a, v);
