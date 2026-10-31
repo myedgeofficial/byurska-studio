@@ -91,6 +91,7 @@ export const kljucDomene = (d) => STRANI[String(d || "").toLowerCase()] || Strin
 
 async function admob(az, od, do_) {
   const r = await fetch("https://admob.googleapis.com/v1/accounts", { headers: { authorization: "Bearer " + az } });
+  if (r.status === 401 || r.status === 403) return {}; // ta Google račun nima AdMob (npr. samo AdSense)
   if (!r.ok) throw new Error("AdMob " + r.status + " " + (await r.text()).slice(0, 140));
   const out = {};
   for (const a of (await r.json()).account || []) {
@@ -113,6 +114,7 @@ async function admob(az, od, do_) {
 
 async function adsense(az, od, do_) {
   const r = await fetch("https://adsense.googleapis.com/v2/accounts", { headers: { authorization: "Bearer " + az } });
+  if (r.status === 401 || r.status === 403) return {}; // ta Google račun nima AdSense (npr. samo AdMob)
   if (!r.ok) throw new Error("AdSense " + r.status + " " + (await r.text()).slice(0, 140));
   const out = {};
   for (const a of (await r.json()).accounts || []) {
