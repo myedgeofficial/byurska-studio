@@ -25,6 +25,7 @@ jobs:
           KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
           ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
           KEY_P8: ${{ secrets.APPSTORE_KEY_P8 }}
+          VENDOR: "94931729" # App Store Connect → Payments and Financial Reports
           JAVNI: |
             -----BEGIN PUBLIC KEY-----
             MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA0lStzbju7CkmtO9oncKT
