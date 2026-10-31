@@ -1,0 +1,51 @@
+name: Preveri statistiko
+
+# Primerja številke na stats.remako.si s surovimi podatki Applea, AdMob in AdSense (izpiše samo vsote).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["firebase/orodja/preveri-statistiko.mjs", ".github/workflows/preveri-statistiko.yml"]
+
+jobs:
+  preveri:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: firebase/functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --silent
+      - name: Primerjaj
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          KEY_P8: ${{ secrets.APPSTORE_KEY_P8 }}
+          JAVNI: |
+            -----BEGIN PUBLIC KEY-----
+            MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA0lStzbju7CkmtO9oncKT
+            krnF5V14fQ9kHgHHKvnY0QiDvhjsscNERAImGqp27V2HYMW3TqkrAoDK6zaWNT11
+            COuGpuWXi0BEoA6redkL8iZ5ZpVGLguo0XBMRLYVDppIKbpb2S9UpEJhXglk/3Os
+            q4n5V8X0QMfz5Hrmc9dBZYg6jOO2xXFoHHF4UMtNDGnmgh/PeI3WP0GzaBe+BP1f
+            jH0rpTbFWML6rJ+KRMeDpd36q3mcMvtu0wwCNSmwjar6XCBSTNtu7jPp0HHkquZk
+            ZTmpSL9olnla/rZ5sbfUbG2f2fZGy9+fPgKqMUVLaHAdr60DVsaVDvdbrooUOhIh
+            NhM3FNCquKPeh88ur3abuh/aG2bL0/JM9coKqPQqO1N8r99QyQFkKvZ1LxXwBWJi
+            Fmh8XhzZNjkfj5hjmJz+qts/daASDMtZVd4XyBEseIa+JpiS6NtfCuNH8mqGGHOc
+            v1ewpcH9GGGb0ywMKRxxDylYZWJTYvNx2qp7TKsG+dR7AgMBAAE=
+            -----END PUBLIC KEY-----
+        run: |
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          # Repozitorij je javen, zato se izpis šifrira z javnim ključem; prebere ga lahko samo imetnik zasebnega ključa.
+          node ../orodja/preveri-statistiko.mjs > "$RUNNER_TEMP/izpis.txt" 2>&1 || true
+          node -e '
+            const c = require("crypto"), fs = require("fs");
+            const k = c.randomBytes(32), iv = c.randomBytes(12), a = c.createCipheriv("aes-256-gcm", k, iv);
+            const t = Buffer.concat([a.update(fs.readFileSync(process.argv[1])), a.final()]);
+            const ek = c.publicEncrypt({ key: process.env.JAVNI, oaepHash: "sha256" }, k);
+            console.log("SIFRA:" + Buffer.concat([ek, iv, a.getAuthTag(), t]).toString("base64"));
+          ' "$RUNNER_TEMP/izpis.txt"
