@@ -138,8 +138,8 @@ export async function oglasi(prej) {
   const s = (await skrito().get()).data() || {};
   const racuni = Object.values(s.racuni || {});
   if (!racuni.length) return { povezano: false, osvezeno: Date.now() };
-  // Nov povezan račun takoj sproži branje (ne čaka ure).
-  const isti = (prej?.racuni || []).length === racuni.length;
+  // Nov povezan račun ali prejšnja napaka takoj sproži branje (ne čaka ure).
+  const isti = (prej?.racuni || []).length === racuni.length && !Object.keys(prej?.napake || {}).length;
   if (prej?.povezano && isti && Date.now() - (prej.osvezeno || 0) < 55 * 60_000) return null;
   const o = await odjemalecGoogle(), danes = danLj(), od = dodajDni(danes, -400);
   const out = { povezano: true, osvezeno: Date.now(), racuni: [], admob: {}, adsense: {}, napake: {} };
