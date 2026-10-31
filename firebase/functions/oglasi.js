@@ -1,7 +1,7 @@
 // Zaslužek od reklam za stats.remako.si: AdMob (aplikacije) in AdSense (spletne strani).
 // Oba API-ja sprejmeta samo prijavo uporabnika (ne službenega računa), zato se lastnik računa enkrat poveže:
 //   1. stats.remako.si → »Poveži reklame« pokliče statistikaOglasiZacni (samo bralci statistike) in dobi enkratno povezavo,
-//   2. https://byurska-studio.web.app/oglasi.html (izvor, ki ga Googlov odjemalec Firebase že dovoli) odpre Googlovo okno,
+//   2. https://byurska-studio.firebaseapp.com/oglasi.html (izvor firebaseapp.com Googlov odjemalec Firebase že dovoli, web.app pa ne) odpre Googlovo okno,
 //   3. koda gre v statistikaOglasi, ki jo zamenja za trajni žeton in ga shrani v stat-skrito/oglasi (brskalnik do tega nima dostopa).
 // Odjemalca (client id in secret) preberemo iz nastavitev Google prijave v Firebase, ki ga je ustvaril sam.
 import crypto from "node:crypto";
@@ -12,7 +12,7 @@ import { STRANI, danLj, dodajDni } from "./stat-jedro.js";
 const REGIJA = "europe-west1";
 const PROJEKT = process.env.GCLOUD_PROJECT || "byurska-studio";
 const OBSEG = "openid email https://www.googleapis.com/auth/admob.readonly https://www.googleapis.com/auth/adsense.readonly";
-const STRAN = `https://${PROJEKT}.web.app/oglasi.html`;
+const STRAN = `https://${PROJEKT}.firebaseapp.com/oglasi.html`;
 const db = () => getFirestore();
 const skrito = () => db().doc("stat-skrito/oglasi");
 
