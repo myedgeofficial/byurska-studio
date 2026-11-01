@@ -35,6 +35,29 @@ export function prejemnikiNaloge(prej, zdaj) {
 export const PLATFORME = [["ig", "Instagram"], ["fb", "Facebook"], ["tiktok", "TikTok"]];
 export const platformeIme = (p = []) => PLATFORME.filter(([k]) => p.includes(k)).map(([, n]) => n).join(" + ") || "Objava";
 
+// Računi na družbenih omrežjih za vsako aplikacijo/stran (zavihek »Social« v mapi). Gesla ostanejo v zavihku Gesla.
+export const SOCIALNA = [
+  ["ig", "Instagram", "https://instagram.com/"], ["tiktok", "TikTok", "https://tiktok.com/@"], ["fb", "Facebook", "https://facebook.com/"],
+  ["yt", "YouTube", "https://youtube.com/@"], ["x", "X", "https://x.com/"], ["threads", "Threads", "https://threads.net/@"],
+  ["linkedin", "LinkedIn", "https://linkedin.com/company/"], ["pinterest", "Pinterest", "https://pinterest.com/"], ["drugo", "Drugo", ""]
+];
+export const socialnoIme = (k) => SOCIALNA.find(([x]) => x === k)?.[1] || "Drugo";
+// »@nakupko« ali »nakupko« → profil na izbranem omrežju; vpisana povezava ostane, kot je.
+export function profilUrl(k, vnos = "") {
+  const v = String(vnos).trim();
+  if (/^https?:\/\//i.test(v)) return v;
+  if (/^[\w.-]+\.[a-z]{2,}\//i.test(v)) return `https://${v}`;
+  const baza = SOCIALNA.find(([x]) => x === k)?.[2], ime = v.replace(/^@/, "");
+  return baza && /^[\w.-]+$/.test(ime) ? baza + ime : "";
+}
+// Kaj pokažemo v seznamu: »@nakupko« iz imena ali iz povezave.
+export function profilIme(vnos = "") {
+  const v = String(vnos).trim();
+  const m = /^(?:https?:\/\/)?(?:www\.)?[^/]+\/(?:company\/)?@?([^/?#]+)/i.exec(v);
+  if (m && /[./]/.test(v)) return "@" + m[1];
+  return v ? "@" + v.replace(/^@/, "") : "";
+}
+
 // Drevo map: korenske mape po vrstnem redu, vsaka s svojimi podmapami.
 export function drevo(mape) {
   const po = (a, b) => (a.red ?? 0) - (b.red ?? 0) || String(a.ime).localeCompare(String(b.ime), "sl");

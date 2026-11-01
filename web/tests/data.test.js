@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { drevo, pozdrav, ZACETNE_MAPE, dan, opomnikiZa, opisOpomnikov, platformeIme, vrstaDatoteke, velikost, rokNaloge } from "../src/data.js";
+import { drevo, pozdrav, ZACETNE_MAPE, dan, opomnikiZa, opisOpomnikov, platformeIme, vrstaDatoteke, velikost, rokNaloge, profilUrl, profilIme } from "../src/data.js";
 
 test("drevo kot na skici", () => {
   const d = drevo(ZACETNE_MAPE);
@@ -169,4 +169,15 @@ test("rok naloge", () => {
   assert.deepEqual([rokNaloge("2026-10-24", zdaj).besedilo, rokNaloge("2026-10-24", zdaj).nujnost], ["rok je bil včeraj", "zamuda"]);
   assert.equal(rokNaloge("2026-10-30", zdaj).besedilo, "do pet 30. 10.");
   assert.equal(rokNaloge("2026-10-30", zdaj).nujnost, "");
+});
+
+test("social računi: povezava in ime", () => {
+  assert.equal(profilUrl("ig", "@nakupko"), "https://instagram.com/nakupko");
+  assert.equal(profilUrl("tiktok", "nakupko.app"), "https://tiktok.com/@nakupko.app");
+  assert.equal(profilUrl("fb", "https://facebook.com/nakupko"), "https://facebook.com/nakupko");
+  assert.equal(profilUrl("ig", "instagram.com/nakupko"), "https://instagram.com/nakupko");
+  assert.equal(profilUrl("drugo", "nakupko"), "");
+  assert.equal(profilIme("https://www.tiktok.com/@nakupko?lang=sl"), "@nakupko");
+  assert.equal(profilIme("nakupko"), "@nakupko");
+  assert.equal(profilIme("@nakupko"), "@nakupko");
 });

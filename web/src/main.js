@@ -12,7 +12,7 @@ import {
 import { getStorage, ref, uploadBytesResumable, uploadBytes, getDownloadURL, deleteObject, connectStorageEmulator } from "firebase/storage";
 import {
   ZACETNI_CLANI, ZACETNE_MAPE, PLATFORME, platformeIme, drevo, dan, ura, pozdrav, kdajBesedilo, opomnikiZa, PRIVZETI_OPOMNIKI, opisOpomnikov, OPOMNI_PRI_OBJAVI, PRIVZETO_OPOMNI, opisOpomni,
-  vrstaDatoteke, velikost, veljavenEmail, nujnost, znesek, evri, kratkoIme, ikonaMape, todoOseba, stevilo, ics, barvaClana, nalogaZa, odgovoren, vidiObjave, rokNaloge
+  vrstaDatoteke, velikost, veljavenEmail, nujnost, znesek, evri, kratkoIme, ikonaMape, todoOseba, stevilo, ics, barvaClana, nalogaZa, odgovoren, vidiObjave, rokNaloge, SOCIALNA, socialnoIme, profilUrl, profilIme
 } from "./data.js";
 import { novaSol, kljucIzGesla, zakleni, odkleni, preveritev, pravilen } from "./trezor.js";
 
@@ -114,7 +114,7 @@ const osnutek = {}; // nedokončan vnos nove naloge
 const odklenjeneMape = new Set();
 let skritoOd = 0;
 const zaklenjena = (m) => !!m?.zaklep && !odklenjeneMape.has(m.id);
-const M = { datoteke: [], gesla: [], opombe: [], ideje: [], skripte: [], naloge: [], odklenjena: {}, nalaganja: [] };
+const M = { datoteke: [], gesla: [], opombe: [], ideje: [], skripte: [], naloge: [], racuni: [], odklenjena: {}, nalaganja: [] };
 
 const imeClana = (e) => S.clani[e]?.ime || ZACETNI_CLANI[e] || String(e || "").split("@")[0];
 // Moja mapa: prava mapa (vsebina, naloge, opombe, gesla ...), ki jo vidi samo lastnik. Podatki so pod zasebno/{e-pošta}, kamor drugi nimajo dostopa (pravila v bazi).
@@ -691,7 +691,7 @@ function prijaviMapo(id) {
   odjaviMapo();
   osnutek.odprt = false;
   osnutek.tn = osnutek.tz = osnutek.opombe = osnutek.ideje = osnutek.skripte = osnutek.skripteN = "";
-  M.datoteke = []; M.gesla = []; M.opombe = []; M.ideje = []; M.skripte = []; M.naloge = []; M.nalozeno = false;
+  M.datoteke = []; M.gesla = []; M.opombe = []; M.ideje = []; M.skripte = []; M.naloge = []; M.racuni = []; M.nalozeno = false;
   mapaUnsub.push(onSnapshot(query(zbirka(id, "datoteke"), orderBy("ob", "desc")), (s) => {
     M.datoteke = s.docs.map((d) => ({ id: d.id, ...d.data() })); M.nalozeno = true;
     if (pot.zaslon === "mapa" && pot.mapa === id) osvezi();
@@ -703,6 +703,10 @@ function prijaviMapo(id) {
   mapaUnsub.push(onSnapshot(query(zbirka(id, "naloge"), orderBy("ob", "desc")), (s) => {
     M.naloge = s.docs.map((d) => ({ id: d.id, ...d.data() }));
     if (pot.zaslon === "mapa" && pot.mapa === id && pot.zavihek === "todo") osvezi();
+  }, () => {}));
+  mapaUnsub.push(onSnapshot(query(zbirka(id, "racuni"), orderBy("ob")), (s) => {
+    M.racuni = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+    if (pot.zaslon === "mapa" && pot.mapa === id && pot.zavihek === "racuni") osvezi();
   }, () => {}));
   for (const vrsta of Object.keys(ZAPISKI)) mapaUnsub.push(onSnapshot(query(zbirka(id, vrsta), orderBy("ob", "desc")), (s) => {
     M[vrsta] = s.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -716,6 +720,7 @@ const SKUPINE = [
   { k: "vsebina", ime: "Vsebina", deli: [["urejeno", "Urejeno"], ["surovo", "Surovo"]] },
   { k: "zapiski", ime: "Zapiski", deli: [["ideje", "Ideje"], ["opombe", "Opombe"], ["skripte", "Skripte"], ["gesla", "Gesla"]] },
   { k: "objave", ime: "Objave", deli: [["objave", "Objave"]] },
+  { k: "racuni", ime: "Social", deli: [["racuni", "Social"]] },
 ];
 // Mapa za gesla: namesto vsebine (urejeno/surovo) samo gesla, opombe in naloge.
 const SKUPINE_GESLA = [
@@ -757,6 +762,7 @@ function renderMapa() {
   else if (z === "gesla") renderGesla(el, m);
   else if (ZAPISKI[z]) renderZapiski(el, m, z);
   else if (z === "todo") renderNaloge(el, m);
+  else if (z === "racuni") renderRacuni(el, m);
   else {
     const moje = S.objave.filter((o) => o.mapa === m.id);
     el.innerHTML = `<button class="btn" id="nova">Nova objava</button>
@@ -1281,6 +1287,52 @@ function urediZapisek(m, vrsta, o) {
     $("oeb").onclick = () => {
       if (!confirm(`Izbrišem: ${Z.ena.toLowerCase()}?`)) return;
       deleteDoc(dok(m.id, vrsta, o.id)).catch(napaka); closeSheet();
+    };
+  });
+}
+
+/* ---------- računi na družbenih omrežjih (IG, TikTok ...) za to aplikacijo/stran ---------- */
+const izbiraOmrezja = (izbran) => SOCIALNA.map(([k, n]) => `<option value="${k}"${k === izbran ? " selected" : ""}>${n}</option>`).join("");
+function renderRacuni(el, m) {
+  const po = (a, b) => SOCIALNA.findIndex(([k]) => k === a.platforma) - SOCIALNA.findIndex(([k]) => k === b.platforma) || (a.ob || 0) - (b.ob || 0);
+  const seznam = [...M.racuni].sort(po);
+  el.innerHTML = `<div class="dvo"><div class="dvo-l"><div class="opn">
+    <select id="rp">${izbiraOmrezja("ig")}</select>
+    <input id="ri" maxlength="300" placeholder="@ime ali povezava do profila" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <input id="ro" maxlength="300" placeholder="Opomba (neobvezno), npr. glavni račun, kdo ga vodi">
+    <button class="btn" id="rs">Dodaj račun</button>
+    <p class="small muted">Gesla teh računov shrani v Zapiski › Gesla.</p></div></div>
+    <div class="dvo-r"><div class="list" style="margin-top:14px">${seznam.length ? seznam.map((r) => `<button class="item opomba" data-r="${esc(r.id)}"><div class="grow">
+      <div class="nsl">${esc(socialnoIme(r.platforma))} · ${esc(profilIme(r.ime))}</div>${r.opomba ? `<div class="ob">${esc(r.opomba)}</div>` : ""}
+      <small>${esc(imeClana(r.uredil || r.dodal))} · ${esc(kdajBesedilo(r.ob))}</small></div></button>`).join("")
+      : `<div class="empty">Instagram, TikTok, Facebook, YouTube ... računi za ${esc(kratkoIme(m.ime).ime)}.</div>`}</div></div></div>`;
+  $("rs").onclick = () => {
+    const ime = $("ri").value.trim(), opomba = $("ro").value.trim();
+    if (!ime) return toast("Vpiši ime računa ali povezavo.");
+    $("ri").value = ""; $("ro").value = "";
+    addDoc(zbirka(m.id, "racuni"), { platforma: $("rp").value, ime, opomba, dodal: jaz, ob: Date.now() }).catch(napaka);
+  };
+  el.querySelectorAll(".item[data-r]").forEach((b) => (b.onclick = () => urediRacun(m, seznam.find((x) => x.id === b.dataset.r))));
+}
+
+function urediRacun(m, r) {
+  if (!r) return;
+  const url = profilUrl(r.platforma, r.ime);
+  openSheet(`<h3>${esc(socialnoIme(r.platforma))} · ${esc(profilIme(r.ime))}</h3>
+    ${url ? `<a class="btn ghost" href="${esc(url)}" target="_blank" rel="noopener">Odpri profil</a>` : ""}
+    <select id="rep">${izbiraOmrezja(r.platforma)}</select>
+    <input id="rei" maxlength="300" value="${esc(r.ime)}" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <input id="reo" maxlength="300" placeholder="Opomba" value="${esc(r.opomba || "")}">
+    <p class="small muted">${esc(imeClana(r.dodal))} · ${esc(kdajBesedilo(r.ob))}</p>
+    <div class="row"><button class="btn" id="res">Shrani</button><button class="btn danger" id="reb">Izbriši</button></div>`, () => {
+    $("res").onclick = () => {
+      const ime = $("rei").value.trim();
+      if (!ime) return toast("Prazno.");
+      updateDoc(dok(m.id, "racuni", r.id), { platforma: $("rep").value, ime, opomba: $("reo").value.trim(), uredil: jaz }).catch(napaka); closeSheet();
+    };
+    $("reb").onclick = () => {
+      if (!confirm(`Izbrišem račun ${profilIme(r.ime)}?`)) return;
+      deleteDoc(dok(m.id, "racuni", r.id)).catch(napaka); closeSheet();
     };
   });
 }
