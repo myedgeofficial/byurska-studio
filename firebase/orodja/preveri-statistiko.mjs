@@ -17,6 +17,22 @@ const od = dnevi.at(-1), do_ = dnevi[0];
 const eur = (x) => (Math.round(x * 100) / 100).toFixed(2) + " €";
 const vrstica = (...a) => console.log(a.join(" | "));
 
+// 0) Sproži osvežitev Nakupkovega /nadzor (nadzorOsvezi) in po 2 min preberi Applove prenose po aplikacijah neposredno.
+try {
+  const { GoogleAuth } = require("google-auth-library");
+  const tk = (await (await new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/firebase.database", "https://www.googleapis.com/auth/userinfo.email"] }).getClient()).getAccessToken()).token;
+  const NDB = "https://nakupko-8ad19-default-rtdb.europe-west1.firebasedatabase.app/nadzor";
+  const w = await fetch(NDB + "/osvezi.json", { method: "PUT", headers: { authorization: "Bearer " + tk }, body: JSON.stringify(Date.now()) });
+  console.log("osvezi /nadzor:", w.status);
+  if (w.ok) await new Promise((r) => setTimeout(r, 150_000));
+  const pa = await (await fetch(NDB + "/apple/poAplikacijah.json", { headers: { authorization: "Bearer " + tk } })).json();
+  const sum = {};
+  for (const [d, poApp] of Object.entries(pa || {})) for (const [a, x] of Object.entries(poApp || {})) if (x && typeof x === "object" && x.prenosi) {
+    (sum[a] = sum[a] || { skupaj: 0, dnevi: [] }).skupaj += x.prenosi; sum[a].dnevi.push(d + ":" + x.prenosi);
+  }
+  for (const [a, v] of Object.entries(sum)) vrstica("/nadzor Apple prenosi", a, v.skupaj, a === "popravko" ? v.dnevi.join(" ") : "");
+} catch (e) { console.log("osvezi napaka:", e.message); }
+
 const s = (await db.doc("stat-povzetek/skupno").get()).data() || {};
 console.log(`\n== Obdobje ${od} … ${do_} (${DNI} dni) ==`);
 
