@@ -84,6 +84,16 @@ jobs:
             && echo "Shramba lahko preverja člane." || echo "::warning::Pravice za preverjanje članov v shrambi ni bilo mogoče dodati."
           echo "::endgroup::"
 
+          # Varnostne kopije baze: obnova na poljuben trenutek zadnjih 7 dni + dnevna kopija, hranjena 5 tednov.
+          echo "::group::Varnostne kopije"
+          gcloud firestore databases update --database='(default)' --enable-pitr --project "$P" --quiet >/dev/null \
+            && echo "Obnova zadnjih 7 dni: vklopljena." || echo "::warning::Obnova zadnjih 7 dni (PITR) ni vklopljena."
+          if gcloud firestore backups schedules list --database='(default)' --project "$P" --format='value(name)' | grep -q .; then echo "Dnevna kopija: že nastavljena."
+          else gcloud firestore backups schedules create --database='(default)' --recurrence=daily --retention=5w --project "$P" >/dev/null \
+            && echo "Dnevna kopija: nastavljena." || echo "::warning::Dnevna kopija ni nastavljena."; fi
+          gcloud firestore backups list --project "$P" --format='table(name.basename(),snapshotTime,state)' || true
+          echo "::endgroup::"
+
           $FB deploy --only firestore,storage --force
 
           echo "::group::Opomniki za objave (funkcija ob 9:00 in 18:00)"
